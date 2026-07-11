@@ -25,6 +25,11 @@ function isSecretReference(value) {
   return typeof value === "string" && /\bsecrets\b/.test(value);
 }
 
+function isNpmTokenReference(value) {
+  return typeof value === "string" &&
+    /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_[A-Z0-9_]*TOKEN)\b/i.test(value);
+}
+
 function containsPullRequestTarget(value, seen = new WeakSet()) {
   if (value === "pull_request_target") return true;
   if (Array.isArray(value)) return value.some((item) => containsPullRequestTarget(item, seen));
@@ -154,6 +159,9 @@ function checkFile(file) {
     if (isSecretReference(value)) {
       fail(file, "repository secrets are forbidden; use github.token and Trusted Publishing/OIDC");
     }
+    if (isNpmTokenReference(value)) {
+      fail(file, "npm token environment variables and references are forbidden; use Trusted Publishing/OIDC");
+    }
 
     if (Array.isArray(value)) {
       for (const item of value) walk(item, context);
@@ -164,6 +172,9 @@ function checkFile(file) {
     seen.add(value);
 
     for (const [key, item] of Object.entries(value)) {
+      if (isNpmTokenReference(key)) {
+        fail(file, "npm token environment variables and references are forbidden; use Trusted Publishing/OIDC");
+      }
       if (key === "cache") fail(file, "workflow dependency caching is forbidden");
       if (key === "uses") checkActionReference(file, item);
       if (key === "id-token" && item === "write" && (fileName !== "release.yml" || context.jobName !== "publish")) {
