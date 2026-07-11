@@ -42,11 +42,13 @@ function containsPullRequestTarget(value, seen = new WeakSet()) {
 }
 
 function isAllowedPublishCommand(command) {
-  return [
-    /^sha512sum --check(?: --strict)? [^;&|`$]+$/,
-    /^shasum -a 512 -c [^;&|`$]+$/,
-    /^npm publish release-artifacts\/[A-Za-z0-9._@+-]+\.tgz --provenance(?: --access public)?$/,
-  ].some((pattern) => pattern.test(command));
+  return new Set([
+    "cd release-artifacts && sha512sum --check SHA512SUMS",
+    "cd release-artifacts && sha256sum --check SHA256SUMS",
+    "sha512sum --check release-artifacts/SHA512SUMS",
+    "sha256sum --check release-artifacts/SHA256SUMS",
+  ]).has(command) ||
+    /^npm publish release-artifacts\/[A-Za-z0-9._@+-]+\.tgz --provenance(?: --access public)?$/.test(command);
 }
 
 function checkActionReference(file, actionReference) {
@@ -91,6 +93,14 @@ function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
 
+  if (Object.hasOwn(publishJob, "env")) {
+    fail(file, "OIDC publish job may not define environment variables");
+  }
+
+  if (Object.hasOwn(publishJob.defaults?.run ?? {}, "shell")) {
+    fail(file, "OIDC publish job may not override defaults.run.shell");
+  }
+
   if (publishJob.steps === undefined) return;
   if (!Array.isArray(publishJob.steps)) {
     fail(file, "OIDC publish job steps must be a sequence");
@@ -101,6 +111,14 @@ function checkOidcPublishJob(file, workflow) {
     if (!isMapping(step)) {
       fail(file, "OIDC publish job steps must be mappings");
       continue;
+    }
+
+    if (Object.hasOwn(step, "env")) {
+      fail(file, "OIDC publish job steps may not define environment variables");
+    }
+
+    if (Object.hasOwn(step, "shell")) {
+      fail(file, "OIDC publish job steps may not override the shell");
     }
 
     if (typeof step.uses === "string") {
