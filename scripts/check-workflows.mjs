@@ -55,7 +55,7 @@ function checksumPublishLoop(algorithm) {
   esac
   case "$tarball" in
     *.tgz)
-      npm publish "release-artifacts/$tarball" --provenance
+      npm publish "release-artifacts/$tarball" --provenance --ignore-scripts
       ;;
     *)
       exit 1
@@ -77,11 +77,7 @@ function containsSelfHosted(value, seen = new WeakSet()) {
   return Object.values(value).some((item) => containsSelfHosted(item, seen));
 }
 
-function isGitHubHostedRunner(value) {
-  const isLabel = (label) =>
-    typeof label === "string" && /^(?:ubuntu|windows|macos)(?:-[A-Za-z0-9.]+)*$/i.test(label);
-  return Array.isArray(value) ? value.length > 0 && value.every(isLabel) : isLabel(value);
-}
+const oidcPublishRunners = new Set(["ubuntu-24.04"]);
 
 function checkActionReference(file, actionReference) {
   if (typeof actionReference !== "string") {
@@ -137,8 +133,8 @@ function checkOidcPublishJob(file, workflow) {
     }
   }
 
-  if (!isGitHubHostedRunner(publishJob["runs-on"])) {
-    fail(file, "OIDC publish job runs-on must use only GitHub-hosted runner labels");
+  if (!oidcPublishRunners.has(publishJob["runs-on"])) {
+    fail(file, "OIDC publish job runs-on must be ubuntu-24.04");
   }
 
   if (Object.hasOwn(publishJob, "env")) {
@@ -191,6 +187,9 @@ function checkOidcPublishJob(file, workflow) {
       if (checksumAlgorithm) {
         verifiedAlgorithms.add(checksumAlgorithm);
       } else if (publishAlgorithm) {
+        if (!verifiedAlgorithms.has(publishAlgorithm)) {
+          fail(file, `OIDC publish loop must verify SHA${publishAlgorithm}SUMS before publishing`);
+        }
         publishedAlgorithms.add(publishAlgorithm);
       } else {
         fail(file, "OIDC publish job may only verify checksums or run the checksum-bound publish loop");
