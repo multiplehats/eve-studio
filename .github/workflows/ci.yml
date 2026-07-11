@@ -43,7 +43,7 @@ jobs:
         run: pnpm check:workflows
 
       - name: Check changesets
-        if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+        if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != 'multiplehats/eve-studio')
         run: pnpm check:changesets
 
       - name: Test
