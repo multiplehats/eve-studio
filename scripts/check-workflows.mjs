@@ -40,7 +40,7 @@ function isAllowedPublishCommand(command) {
   return [
     /^sha512sum --check(?: --strict)? [^;&|`$]+$/,
     /^shasum -a 512 -c [^;&|`$]+$/,
-    /^npm publish (?:[^\s/]+\/)*[^\s/]+\.tgz --provenance(?: --access public)?$/,
+    /^npm publish release-artifacts\/[A-Za-z0-9._@+-]+\.tgz --provenance(?: --access public)?$/,
   ].some((pattern) => pattern.test(command));
 }
 

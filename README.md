@@ -144,10 +144,6 @@ pnpm smoke:studio
 Please do not open public issues for security vulnerabilities. Report sensitive
 findings privately to [@itschrisjayden](https://x.com/itschrisjayden).
 
-## License
-
-eve-studio is released under the [MIT License](LICENSE).
-
 ## Beta
 
 eve-studio is early software and follows eve preview APIs. The extension
