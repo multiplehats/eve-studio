@@ -1,17 +1,10 @@
 packages:
   - apps/*
   - packages/*
-minimumReleaseAgeExclude:
-  - "@ai-sdk/*"
-  - "@rolldown/*"
-  - "@vercel/*"
-  - "@workflow/*"
-  - ai
-  - experimental-ai-sdk-code-mode
-  - eve
-  - nitro
-  - rolldown
-  - workflow
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeExclude: []
 allowBuilds:
   sharp: false
 # Compatibility for eve releases with an incomplete runtime manifest.
