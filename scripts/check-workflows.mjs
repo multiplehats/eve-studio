@@ -125,7 +125,13 @@ function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
 
-  for (const field of ["container", "services", "runs-on"]) {
+  for (const field of ["container", "services"]) {
+    if (Object.hasOwn(publishJob, field)) {
+      fail(file, `OIDC publish job may not define ${field}`);
+    }
+  }
+
+  for (const field of ["runs-on"]) {
     if (containsSelfHosted(publishJob[field])) {
       fail(file, `OIDC publish job ${field} may not use self-hosted execution`);
     }
