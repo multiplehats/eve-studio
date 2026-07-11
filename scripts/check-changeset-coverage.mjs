@@ -25,9 +25,20 @@ const changesets = changedChangesets.filter(
   (file) => file.startsWith(".changeset/") && file.endsWith(".md") && file !== ".changeset/README.md",
 );
 
+function changesetFrontmatter(text) {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+  return match?.[1] ?? "";
+}
+
+function frontmatterSelectsPackage(frontmatter, packageName) {
+  const key = `(?:${packageName}|"${packageName}"|'${packageName}')`;
+  return new RegExp(`^\\s*${key}\\s*:`, "m").test(frontmatter);
+}
+
 const hasStudioChangeset = changesets.some((file) => {
   const text = readFileSync(file, "utf8");
-  return text.includes('"eve-studio"') || text.includes("'eve-studio'");
+  return frontmatterSelectsPackage(changesetFrontmatter(text), "eve-studio");
 });
 
 if (!hasStudioChangeset) {

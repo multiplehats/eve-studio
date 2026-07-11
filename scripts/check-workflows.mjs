@@ -16,6 +16,18 @@ function fail(file, line, message) {
   failures.push(`${file}:${line}: ${message}`);
 }
 
+function yamlKeyPattern(key) {
+  return `(?:${key}|"${key}"|'${key}')`;
+}
+
+function matchYamlKey(line, key) {
+  return line.match(new RegExp(`^(\\s*)(?:-\\s*)?${yamlKeyPattern(key)}\\s*:\\s*(.*)`));
+}
+
+function hasYamlKey(line, key) {
+  return new RegExp(`^\\s*(?:-\\s*)?${yamlKeyPattern(key)}\\s*:`).test(line);
+}
+
 function currentJobForLine(lines, index) {
   let inJobs = false;
   let job = "";
@@ -31,7 +43,9 @@ function currentJobForLine(lines, index) {
 function hasOidcPublishJob(fileName, lines) {
   return lines.some(
     (line, index) =>
-      /id-token:\s*write/.test(line) && fileName === "release.yml" && currentJobForLine(lines, index) === "publish",
+      matchYamlKey(line, "id-token")?.[2].trim() === "write" &&
+      fileName === "release.yml" &&
+      currentJobForLine(lines, index) === "publish",
   );
 }
 
@@ -58,15 +72,15 @@ function checkOidcPublishJob(file, lines) {
       fail(file, lineNumber, "OIDC publish job must not install dependencies or run workspace code");
     }
 
-    const uses = line.match(/uses:\s*([^#\s]+)/);
+    const uses = matchYamlKey(line, "uses");
     if (uses) {
-      const [actionPath] = uses[1].split("@");
+      const [actionPath] = uses[2].split(/\s+#/, 1)[0].trim().split("@");
       if (actionPath !== "actions/setup-node" && actionPath !== "actions/download-artifact") {
         fail(file, lineNumber, "OIDC publish job may only use setup-node and download-artifact actions");
       }
     }
 
-    const run = line.match(/^(\s*)run:\s*(.*)$/);
+    const run = matchYamlKey(line, "run");
     if (run) {
       runIndent = run[1].length;
       const command = run[2].trim();
@@ -104,7 +118,7 @@ function checkFile(file) {
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
 
-    if (/\bpull_request_target\b/.test(line)) {
+    if (hasYamlKey(line, "pull_request_target")) {
       fail(file, lineNumber, "`pull_request_target` is forbidden");
     }
 
@@ -112,23 +126,24 @@ function checkFile(file) {
       fail(file, lineNumber, "repository secrets are forbidden; use github.token and Trusted Publishing/OIDC");
     }
 
-    if (/^\s*cache\s*:/.test(line)) {
+    if (hasYamlKey(line, "cache")) {
       fail(file, lineNumber, "workflow dependency caching is forbidden");
     }
 
-    if (/id-token:\s*write/.test(line)) {
+    if (matchYamlKey(line, "id-token")?.[2].trim() === "write") {
       const job = currentJobForLine(lines, index);
       if (fileName !== "release.yml" || job !== "publish") {
         fail(file, lineNumber, "`id-token: write` is only allowed in release.yml publish job");
       }
     }
 
-    const uses = line.match(/uses:\s*([^#\s]+)/);
+    const uses = matchYamlKey(line, "uses");
     if (!uses) return;
 
-    const [actionPath, ref] = uses[1].split("@");
+    const actionReference = uses[2].split(/\s+#/, 1)[0].trim();
+    const [actionPath, ref] = actionReference.split("@");
     if (!actionPath || !ref) {
-      fail(file, lineNumber, `action reference must include a pinned SHA: ${uses[1]}`);
+      fail(file, lineNumber, `action reference must include a pinned SHA: ${actionReference}`);
       return;
     }
 
