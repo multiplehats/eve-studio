@@ -121,6 +121,12 @@ function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
 
+  for (const field of ["env", "defaults"]) {
+    if (Object.hasOwn(workflow, field)) {
+      fail(file, `OIDC publish workflow may not define root-level ${field}`);
+    }
+  }
+
   for (const field of ["container", "services"]) {
     if (Object.hasOwn(publishJob, field)) {
       fail(file, `OIDC publish job may not define ${field}`);
@@ -139,6 +145,10 @@ function checkOidcPublishJob(file, workflow) {
 
   if (Object.hasOwn(publishJob, "env")) {
     fail(file, "OIDC publish job may not define environment variables");
+  }
+
+  if (Object.hasOwn(publishJob, "continue-on-error")) {
+    fail(file, "OIDC publish job may not define continue-on-error");
   }
 
   if (Object.hasOwn(publishJob.defaults?.run ?? {}, "shell")) {
@@ -168,6 +178,10 @@ function checkOidcPublishJob(file, workflow) {
       fail(file, "OIDC publish job steps may not override the shell");
     }
 
+    if (Object.hasOwn(step, "continue-on-error")) {
+      fail(file, "OIDC publish job steps may not define continue-on-error");
+    }
+
     if (typeof step.uses === "string") {
       const [actionPath] = step.uses.split("@");
       if (actionPath !== "actions/setup-node" && actionPath !== "actions/download-artifact") {
@@ -185,8 +199,14 @@ function checkOidcPublishJob(file, workflow) {
       const checksumAlgorithm = checksumCommands.get(command);
       const publishAlgorithm = checksumPublishLoops.get(command);
       if (checksumAlgorithm) {
+        if (Object.hasOwn(step, "if")) {
+          fail(file, "OIDC checksum verification steps may not define if conditions");
+        }
         verifiedAlgorithms.add(checksumAlgorithm);
       } else if (publishAlgorithm) {
+        if (Object.hasOwn(step, "if")) {
+          fail(file, "OIDC publish steps may not define if conditions");
+        }
         if (!verifiedAlgorithms.has(publishAlgorithm)) {
           fail(file, `OIDC publish loop must verify SHA${publishAlgorithm}SUMS before publishing`);
         }

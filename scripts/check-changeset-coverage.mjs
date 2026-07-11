@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { parseDocument } from "yaml";
 
 function run(args) {
   const result = spawnSync("git", args, { encoding: "utf8", stdio: "pipe" });
@@ -32,8 +33,17 @@ function changesetFrontmatter(text) {
 }
 
 function frontmatterSelectsPackage(frontmatter, packageName) {
-  const key = `(?:${packageName}|"${packageName}"|'${packageName}')`;
-  return new RegExp(`^\\s*${key}\\s*:`, "m").test(frontmatter);
+  const document = parseDocument(frontmatter, { prettyErrors: false });
+  if (document.errors.length > 0) return false;
+
+  let parsed;
+  try {
+    parsed = document.toJS({ maxAliasCount: 100 });
+  } catch {
+    return false;
+  }
+
+  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && Object.hasOwn(parsed, packageName);
 }
 
 const hasStudioChangeset = changesets.some((file) => {
