@@ -174,20 +174,12 @@ function checkActionReference(file, actionReference) {
   }
 }
 
-function hasOidcWrite(value, seen = new WeakSet()) {
-  if (Array.isArray(value)) return value.some((item) => hasOidcWrite(item, seen));
-  if (!isMapping(value)) return false;
-  if (seen.has(value)) return false;
-  seen.add(value);
-  return Object.entries(value).some(
-    ([key, item]) => key === "id-token" && item === "write" || hasOidcWrite(item, seen),
-  );
-}
-
 function checkReleasePublishEligibility(file, workflow) {
   const buildPackJob = workflow.jobs?.["build-pack"];
-  const publishJob = workflow.jobs?.publish;
-  if (!isMapping(buildPackJob) || !isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
+  if (!isMapping(buildPackJob)) {
+    fail(file, "release workflow must define a build-pack job");
+    return;
+  }
 
   if (buildPackJob.outputs?.has_publishable_tarballs !== "${{ steps.eligibility.outputs.has_publishable_tarballs }}") {
     fail(file, "build-pack must expose the checksum-bound release eligibility output");
@@ -200,24 +192,44 @@ function checkReleasePublishEligibility(file, workflow) {
     fail(file, "build-pack must select unpublished tarballs from SHA256SUMS before publishing");
   }
 
-  if (publishJob.needs !== "build-pack") {
-    fail(file, "OIDC publish job must depend only on build-pack eligibility");
-  }
-  if (publishJob.if !== "needs.build-pack.outputs.has_publishable_tarballs == 'true'") {
-    fail(file, "OIDC publish job must run only when checksum-bound tarballs are eligible");
-  }
-
   const artifactStep = Array.isArray(buildPackJob.steps)
     ? buildPackJob.steps.find((step) => isMapping(step) && step.uses?.startsWith("actions/upload-artifact@"))
     : undefined;
-  if (artifactStep?.with?.name !== "npm-release-artifacts" || artifactStep.with?.path !== "publish-artifacts/") {
+  if (
+    artifactStep?.if !== "steps.eligibility.outputs.has_publishable_tarballs == 'true'" ||
+    artifactStep?.with?.name !== "npm-release-artifacts" ||
+    artifactStep.with?.path !== "publish-artifacts/"
+  ) {
     fail(file, "build-pack must upload only the checksum-bound eligible release artifacts");
   }
 }
 
 function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
-  if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
+  if (!isMapping(publishJob)) {
+    fail(file, "release workflow must define a publish job");
+    return;
+  }
+
+  if (
+    !isMapping(publishJob.permissions) ||
+    Object.keys(publishJob.permissions).length !== 2 ||
+    publishJob.permissions.contents !== "read" ||
+    publishJob.permissions["id-token"] !== "write"
+  ) {
+    fail(file, "OIDC publish job permissions must be exactly contents: read and id-token: write");
+  }
+
+  if (publishJob.environment !== "npm-publish") {
+    fail(file, "OIDC publish job environment must be npm-publish");
+  }
+
+  if (publishJob.needs !== "build-pack") {
+    fail(file, "OIDC publish job must depend only on build-pack eligibility");
+  }
+  if (publishJob.if !== "needs.build-pack.outputs.has_publishable_tarballs == 'true'") {
+    fail(file, "OIDC publish job must run only when checksum-bound tarballs are eligible");
+  }
 
   for (const field of ["env", "defaults"]) {
     if (Object.hasOwn(workflow, field)) {
@@ -253,12 +265,12 @@ function checkOidcPublishJob(file, workflow) {
     fail(file, "OIDC publish job may not override defaults.run.shell");
   }
 
-  if (publishJob.steps === undefined) return;
   if (!Array.isArray(publishJob.steps)) {
     fail(file, "OIDC publish job steps must be a sequence");
     return;
   }
 
+  let downloadsReleaseTarballs = false;
   const verifiedAlgorithms = new Set();
   const publishedAlgorithms = new Set();
 
@@ -286,6 +298,7 @@ function checkOidcPublishJob(file, workflow) {
         fail(file, "OIDC publish job may only use setup-node and download-artifact actions");
       } else {
         checkOidcPublishActionInputs(file, actionPath, step.with);
+        if (actionPath === "actions/download-artifact") downloadsReleaseTarballs = true;
       }
     }
 
@@ -323,6 +336,14 @@ function checkOidcPublishJob(file, workflow) {
 
   if (verifiedAlgorithms.size === 0) {
     fail(file, "OIDC publish job must verify release-artifacts checksums before publishing");
+  }
+
+  if (!downloadsReleaseTarballs) {
+    fail(file, "OIDC publish job must download the eligible release tarballs");
+  }
+
+  if (publishedAlgorithms.size === 0) {
+    fail(file, "OIDC publish job must run a checksum-bound publish loop");
   }
 
   for (const algorithm of publishedAlgorithms) {
