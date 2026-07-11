@@ -114,6 +114,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    outputs:
+      has_publishable_tarballs: ${{ steps.eligibility.outputs.has_publishable_tarballs }}
 
     steps:
       - name: Checkout
@@ -148,16 +150,51 @@ jobs:
       - name: Pack and inspect release tarballs
         run: pnpm check:release-artifacts
 
+      - name: Select unpublished release tarballs
+        id: eligibility
+        run: |
+          set -euo pipefail
+          rm -rf publish-artifacts
+          mkdir publish-artifacts
+          while IFS='  ' read -r checksum tarball; do
+            case "$tarball" in
+              ""|*/*|*\\*|*..*|*[!A-Za-z0-9._@+-]*)
+                exit 1
+                ;;
+            esac
+            case "$tarball" in
+              *.tgz)
+                spec="$(tar -xOf "release-artifacts/$tarball" package/package.json | node -e 'let source=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { source += chunk; }); process.stdin.on("end", () => { const manifest = JSON.parse(source); if (typeof manifest.name !== "string" || typeof manifest.version !== "string") process.exit(1); process.stdout.write(manifest.name + "@" + manifest.version); });')"
+                if npm view "$spec" version >/dev/null 2>&1; then
+                  echo "$spec is already published; skipping"
+                else
+                  printf '%s  %s\n' "$checksum" "$tarball" >> publish-artifacts/SHA256SUMS
+                  cp "release-artifacts/$tarball" "publish-artifacts/$tarball"
+                fi
+                ;;
+              *)
+                exit 1
+                ;;
+            esac
+          done < release-artifacts/SHA256SUMS
+          if [ -s publish-artifacts/SHA256SUMS ]; then
+            (cd publish-artifacts && sha256sum -c SHA256SUMS)
+            echo "has_publishable_tarballs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_publishable_tarballs=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload release tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: npm-release-artifacts
-          path: release-artifacts/
+          path: publish-artifacts/
           if-no-files-found: error
 
   publish:
     name: Publish
     needs: build-pack
+    if: needs.build-pack.outputs.has_publishable_tarballs == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm-publish

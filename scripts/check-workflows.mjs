@@ -69,6 +69,37 @@ const checksumPublishLoops = new Map([
   [checksumPublishLoop("512"), "512"],
 ]);
 
+const releaseEligibilityCommand = `set -euo pipefail
+rm -rf publish-artifacts
+mkdir publish-artifacts
+while IFS='  ' read -r checksum tarball; do
+  case "$tarball" in
+    ""|*/*|*\\\\*|*..*|*[!A-Za-z0-9._@+-]*)
+      exit 1
+      ;;
+  esac
+  case "$tarball" in
+    *.tgz)
+      spec="$(tar -xOf "release-artifacts/$tarball" package/package.json | node -e 'let source=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { source += chunk; }); process.stdin.on("end", () => { const manifest = JSON.parse(source); if (typeof manifest.name !== "string" || typeof manifest.version !== "string") process.exit(1); process.stdout.write(manifest.name + "@" + manifest.version); });')"
+      if npm view "$spec" version >/dev/null 2>&1; then
+        echo "$spec is already published; skipping"
+      else
+        printf '%s  %s\\n' "$checksum" "$tarball" >> publish-artifacts/SHA256SUMS
+        cp "release-artifacts/$tarball" "publish-artifacts/$tarball"
+      fi
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+done < release-artifacts/SHA256SUMS
+if [ -s publish-artifacts/SHA256SUMS ]; then
+  (cd publish-artifacts && sha256sum -c SHA256SUMS)
+  echo "has_publishable_tarballs=true" >> "$GITHUB_OUTPUT"
+else
+  echo "has_publishable_tarballs=false" >> "$GITHUB_OUTPUT"
+fi`;
+
 function containsSelfHosted(value, seen = new WeakSet()) {
   if (typeof value === "string") return value.toLowerCase().includes("self-hosted");
   if (Array.isArray(value)) return value.some((item) => containsSelfHosted(item, seen));
@@ -151,6 +182,37 @@ function hasOidcWrite(value, seen = new WeakSet()) {
   return Object.entries(value).some(
     ([key, item]) => key === "id-token" && item === "write" || hasOidcWrite(item, seen),
   );
+}
+
+function checkReleasePublishEligibility(file, workflow) {
+  const buildPackJob = workflow.jobs?.["build-pack"];
+  const publishJob = workflow.jobs?.publish;
+  if (!isMapping(buildPackJob) || !isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
+
+  if (buildPackJob.outputs?.has_publishable_tarballs !== "${{ steps.eligibility.outputs.has_publishable_tarballs }}") {
+    fail(file, "build-pack must expose the checksum-bound release eligibility output");
+  }
+
+  const eligibilityStep = Array.isArray(buildPackJob.steps)
+    ? buildPackJob.steps.find((step) => isMapping(step) && step.id === "eligibility")
+    : undefined;
+  if (!isMapping(eligibilityStep) || typeof eligibilityStep.run !== "string" || eligibilityStep.run.trim() !== releaseEligibilityCommand) {
+    fail(file, "build-pack must select unpublished tarballs from SHA256SUMS before publishing");
+  }
+
+  if (publishJob.needs !== "build-pack") {
+    fail(file, "OIDC publish job must depend only on build-pack eligibility");
+  }
+  if (publishJob.if !== "needs.build-pack.outputs.has_publishable_tarballs == 'true'") {
+    fail(file, "OIDC publish job must run only when checksum-bound tarballs are eligible");
+  }
+
+  const artifactStep = Array.isArray(buildPackJob.steps)
+    ? buildPackJob.steps.find((step) => isMapping(step) && step.uses?.startsWith("actions/upload-artifact@"))
+    : undefined;
+  if (artifactStep?.with?.name !== "npm-release-artifacts" || artifactStep.with?.path !== "publish-artifacts/") {
+    fail(file, "build-pack must upload only the checksum-bound eligible release artifacts");
+  }
 }
 
 function checkOidcPublishJob(file, workflow) {
@@ -332,7 +394,10 @@ function checkFile(file) {
   }
 
   walk(workflow, { root: true });
-  if (fileName === "release.yml") checkOidcPublishJob(file, workflow);
+  if (fileName === "release.yml") {
+    checkReleasePublishEligibility(file, workflow);
+    checkOidcPublishJob(file, workflow);
+  }
 }
 
 if (existsSync(workflowDir)) {
