@@ -1,0 +1,10 @@
+# Release-sensitive files require maintainer review.
+.github/ @multiplehats
+.changeset/ @multiplehats
+package.json @multiplehats
+pnpm-lock.yaml @multiplehats
+pnpm-workspace.yaml @multiplehats
+packages/*/package.json @multiplehats
+scripts/check-workflows.mjs @multiplehats
+scripts/check-changeset-coverage.mjs @multiplehats
+scripts/check-release-artifacts.mjs @multiplehats

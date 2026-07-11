@@ -113,6 +113,28 @@ pnpm typecheck
 pnpm smoke:studio
 ```
 
+## Changesets and releases
+
+This repository uses Changesets for npm versions and changelogs.
+
+Every pull request that changes `eve-studio`, `@eve-studio/extension`, or the bundled UI in `packages/ui` must include a changeset:
+
+```sh
+pnpm changeset
+```
+
+Select `eve-studio` for CLI, collector, bundled UI, or `npx eve-studio` behavior changes. Select `@eve-studio/extension` for extension runtime changes. Because releases are fixed together, most runtime changes should select both packages unless the change is clearly package-local.
+
+For docs-only, tests-only, CI-only, or refactor changes that should not publish a package, create an empty changeset:
+
+```sh
+pnpm changeset --empty
+```
+
+Do not manually edit package versions or changelog sections. The release workflow opens a generated version PR. Merging that PR publishes exact, checksum-verified npm tarballs from CI.
+
+Publishing uses npm Trusted Publishing through GitHub OIDC. Do not add npm tokens to this repository.
+
 ## Commit convention
 
 Use clear, conventional commit messages when possible:
