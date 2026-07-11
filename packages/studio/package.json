@@ -31,7 +31,7 @@
     "vitest": "^3.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && chmod 755 dist/cli.js",
     "prepack": "node scripts/prepack-check.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"

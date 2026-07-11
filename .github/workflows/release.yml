@@ -96,7 +96,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
           git apply changeset-version.patch
-          git add .changeset package.json pnpm-lock.yaml packages/studio/package.json packages/studio/CHANGELOG.md packages/extension/package.json packages/extension/CHANGELOG.md
+          git add .changeset package.json pnpm-lock.yaml packages/studio/package.json packages/extension/package.json
+          for changelog in packages/studio/CHANGELOG.md packages/extension/CHANGELOG.md; do
+            if [ -e "$changelog" ]; then
+              git add "$changelog"
+            fi
+          done
           git commit -m "chore: version packages"
           git push --force-with-lease origin "$branch"
           existing="$(gh pr list --head "$branch" --base main --json number --jq '.[0].number')"
