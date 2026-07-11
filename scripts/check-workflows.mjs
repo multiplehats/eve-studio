@@ -78,6 +78,42 @@ function containsSelfHosted(value, seen = new WeakSet()) {
 }
 
 const oidcPublishRunners = new Set(["ubuntu-24.04"]);
+const oidcPublishActionInputs = new Map([
+  ["actions/setup-node", new Map([["node-version", "24"], ["registry-url", "https://registry.npmjs.org"]])],
+  ["actions/download-artifact", new Map([["name", "npm-release-artifacts"], ["path", "release-artifacts"]])],
+]);
+
+function isExpression(value) {
+  return typeof value === "string" && value.includes("${{");
+}
+
+function checkOidcPublishActionInputs(file, actionPath, inputs) {
+  const allowedInputs = oidcPublishActionInputs.get(actionPath);
+  if (!allowedInputs) return;
+
+  if (!isMapping(inputs)) {
+    fail(file, `OIDC publish ${actionPath} with must be a mapping`);
+    return;
+  }
+
+  for (const [key, value] of Object.entries(inputs)) {
+    const expectedValue = allowedInputs.get(key);
+    if (expectedValue === undefined) {
+      fail(file, `OIDC publish ${actionPath} may not define with.${key}`);
+    } else if (isExpression(value) || String(value) !== expectedValue) {
+      fail(file, `OIDC publish ${actionPath} with.${key} must be ${expectedValue}`);
+    }
+  }
+
+  const requiredInputs = actionPath === "actions/download-artifact"
+    ? allowedInputs.keys()
+    : ["node-version"];
+  for (const key of requiredInputs) {
+    if (!Object.hasOwn(inputs, key)) {
+      fail(file, `OIDC publish ${actionPath} must define with.${key}`);
+    }
+  }
+}
 
 function checkActionReference(file, actionReference) {
   if (typeof actionReference !== "string") {
@@ -186,6 +222,8 @@ function checkOidcPublishJob(file, workflow) {
       const [actionPath] = step.uses.split("@");
       if (actionPath !== "actions/setup-node" && actionPath !== "actions/download-artifact") {
         fail(file, "OIDC publish job may only use setup-node and download-artifact actions");
+      } else {
+        checkOidcPublishActionInputs(file, actionPath, step.with);
       }
     }
 
