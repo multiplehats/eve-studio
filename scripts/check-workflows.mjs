@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { parseDocument } from "yaml";
 
 const workflowDir = ".github/workflows";
 const allowList = new Map([
@@ -12,40 +13,26 @@ const allowList = new Map([
 
 const failures = [];
 
-function fail(file, line, message) {
-  failures.push(`${file}:${line}: ${message}`);
+function fail(file, message) {
+  failures.push(`${file}: ${message}`);
 }
 
-function yamlKeyPattern(key) {
-  return `(?:${key}|"${key}"|'${key}')`;
+function isMapping(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function matchYamlKey(line, key) {
-  return line.match(new RegExp(`^(\\s*)(?:-\\s*)?${yamlKeyPattern(key)}\\s*:\\s*(.*)`));
+function isSecretReference(value) {
+  return typeof value === "string" && /\bsecrets\b/.test(value);
 }
 
-function hasYamlKey(line, key) {
-  return new RegExp(`^\\s*(?:-\\s*)?${yamlKeyPattern(key)}\\s*:`).test(line);
-}
-
-function currentJobForLine(lines, index) {
-  let inJobs = false;
-  let job = "";
-  for (let i = 0; i <= index; i += 1) {
-    if (/^jobs:\s*$/.test(lines[i])) inJobs = true;
-    if (!inJobs) continue;
-    const match = lines[i].match(/^  ([A-Za-z0-9_-]+):\s*$/);
-    if (match) job = match[1];
-  }
-  return job;
-}
-
-function hasOidcPublishJob(fileName, lines) {
-  return lines.some(
-    (line, index) =>
-      matchYamlKey(line, "id-token")?.[2].trim() === "write" &&
-      fileName === "release.yml" &&
-      currentJobForLine(lines, index) === "publish",
+function containsPullRequestTarget(value, seen = new WeakSet()) {
+  if (value === "pull_request_target") return true;
+  if (Array.isArray(value)) return value.some((item) => containsPullRequestTarget(item, seen));
+  if (!isMapping(value)) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.entries(value).some(
+    ([key, item]) => key === "pull_request_target" || containsPullRequestTarget(item, seen),
   );
 }
 
@@ -57,118 +44,147 @@ function isAllowedPublishCommand(command) {
   ].some((pattern) => pattern.test(command));
 }
 
-function checkOidcPublishJob(file, lines) {
-  const fileName = basename(file);
-  if (!hasOidcPublishJob(fileName, lines)) return;
+function checkActionReference(file, actionReference) {
+  if (typeof actionReference !== "string") {
+    fail(file, "action reference must be a string pinned to an allowed SHA");
+    return;
+  }
 
-  let runIndent = null;
-  const forbiddenPublishContent = /\b(?:checkout|pnpm\/action-setup|pnpm|npm install|npm ci|npm run|npm test|npm exec|yarn|bun|build|typecheck|smoke)\b/i;
+  const [actionPath, ref, ...extra] = actionReference.split("@");
+  if (!actionPath || !ref || extra.length > 0) {
+    fail(file, `action reference must include a pinned SHA: ${actionReference}`);
+    return;
+  }
 
-  lines.forEach((line, index) => {
-    if (currentJobForLine(lines, index) !== "publish") return;
+  if (actionPath === "actions/cache" || actionPath.startsWith("actions/cache/")) {
+    fail(file, "`actions/cache` and its sub-actions are forbidden");
+    return;
+  }
 
-    const lineNumber = index + 1;
-    if (forbiddenPublishContent.test(line)) {
-      fail(file, lineNumber, "OIDC publish job must not install dependencies or run workspace code");
+  const expectedSha = allowList.get(actionPath);
+  if (!expectedSha) {
+    fail(file, `third-party action ${actionPath} is not in the allow-list`);
+    return;
+  }
+
+  if (ref !== expectedSha) {
+    fail(file, `${actionPath} must be pinned to ${expectedSha}, found ${ref}`);
+  }
+}
+
+function hasOidcWrite(value, seen = new WeakSet()) {
+  if (Array.isArray(value)) return value.some((item) => hasOidcWrite(item, seen));
+  if (!isMapping(value)) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  return Object.entries(value).some(
+    ([key, item]) => key === "id-token" && item === "write" || hasOidcWrite(item, seen),
+  );
+}
+
+function checkOidcPublishJob(file, workflow) {
+  const publishJob = workflow.jobs?.publish;
+  if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
+
+  if (publishJob.steps === undefined) return;
+  if (!Array.isArray(publishJob.steps)) {
+    fail(file, "OIDC publish job steps must be a sequence");
+    return;
+  }
+
+  for (const step of publishJob.steps) {
+    if (!isMapping(step)) {
+      fail(file, "OIDC publish job steps must be mappings");
+      continue;
     }
 
-    const uses = matchYamlKey(line, "uses");
-    if (uses) {
-      const [actionPath] = uses[2].split(/\s+#/, 1)[0].trim().split("@");
+    if (typeof step.uses === "string") {
+      const [actionPath] = step.uses.split("@");
       if (actionPath !== "actions/setup-node" && actionPath !== "actions/download-artifact") {
-        fail(file, lineNumber, "OIDC publish job may only use setup-node and download-artifact actions");
+        fail(file, "OIDC publish job may only use setup-node and download-artifact actions");
       }
     }
 
-    const run = matchYamlKey(line, "run");
-    if (run) {
-      runIndent = run[1].length;
-      const command = run[2].trim();
-      if (command && command !== "|" && command !== ">") {
-        if (!isAllowedPublishCommand(command)) {
-          fail(file, lineNumber, "OIDC publish job may only verify checksums or publish a tarball with provenance");
-        }
-        runIndent = null;
-      }
-      return;
-    }
-
-    if (runIndent !== null) {
-      const indent = line.match(/^\s*/)[0].length;
-      if (!line.trim()) return;
-      if (indent <= runIndent) {
-        runIndent = null;
-        return;
+    if (Object.hasOwn(step, "run")) {
+      if (typeof step.run !== "string") {
+        fail(file, "OIDC publish job run commands must be strings");
+        continue;
       }
 
-      if (!isAllowedPublishCommand(line.trim())) {
-        fail(file, lineNumber, "OIDC publish job may only verify checksums or publish a tarball with provenance");
+      const commands = step.run.split(/\r?\n/).map((command) => command.trim()).filter(Boolean);
+      if (commands.length === 0 || commands.some((command) => !isAllowedPublishCommand(command))) {
+        fail(file, "OIDC publish job may only verify checksums or publish a tarball with provenance");
       }
     }
-  });
+
+    if (!Object.hasOwn(step, "uses") && !Object.hasOwn(step, "run")) {
+      fail(file, "OIDC publish job steps must use an approved action or command");
+    }
+  }
 }
 
 function checkFile(file) {
   const text = readFileSync(file, "utf8");
-  const lines = text.split(/\r?\n/);
+  const document = parseDocument(text, { prettyErrors: false });
+  if (document.errors.length > 0) {
+    for (const error of document.errors) fail(file, `invalid YAML: ${error.message}`);
+    return;
+  }
+
+  let workflow;
+  try {
+    workflow = document.toJS({ maxAliasCount: 100 });
+  } catch (error) {
+    fail(file, `unable to read YAML: ${error.message}`);
+    return;
+  }
+
+  if (!isMapping(workflow)) {
+    fail(file, "workflow must be a mapping");
+    return;
+  }
+
+  if (containsPullRequestTarget(workflow.on)) {
+    fail(file, "`pull_request_target` is forbidden");
+  }
+
   const fileName = basename(file);
-
-  checkOidcPublishJob(file, lines);
-
-  lines.forEach((line, index) => {
-    const lineNumber = index + 1;
-
-    if (hasYamlKey(line, "pull_request_target")) {
-      fail(file, lineNumber, "`pull_request_target` is forbidden");
+  const seen = new WeakSet();
+  function walk(value, context = {}) {
+    if (isSecretReference(value)) {
+      fail(file, "repository secrets are forbidden; use github.token and Trusted Publishing/OIDC");
     }
 
-    if (/\bsecrets\./.test(line)) {
-      fail(file, lineNumber, "repository secrets are forbidden; use github.token and Trusted Publishing/OIDC");
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, context);
+      return;
     }
 
-    if (hasYamlKey(line, "cache")) {
-      fail(file, lineNumber, "workflow dependency caching is forbidden");
-    }
+    if (!isMapping(value) || seen.has(value)) return;
+    seen.add(value);
 
-    if (matchYamlKey(line, "id-token")?.[2].trim() === "write") {
-      const job = currentJobForLine(lines, index);
-      if (fileName !== "release.yml" || job !== "publish") {
-        fail(file, lineNumber, "`id-token: write` is only allowed in release.yml publish job");
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "cache") fail(file, "workflow dependency caching is forbidden");
+      if (key === "uses") checkActionReference(file, item);
+      if (key === "id-token" && item === "write" && (fileName !== "release.yml" || context.jobName !== "publish")) {
+        fail(file, "`id-token: write` is only allowed in release.yml publish job");
+      }
+
+      if (context.root && key === "jobs" && isMapping(item)) {
+        for (const [jobName, job] of Object.entries(item)) walk(job, { jobName });
+      } else {
+        walk(item, context);
       }
     }
+  }
 
-    const uses = matchYamlKey(line, "uses");
-    if (!uses) return;
-
-    const actionReference = uses[2].split(/\s+#/, 1)[0].trim();
-    const [actionPath, ref] = actionReference.split("@");
-    if (!actionPath || !ref) {
-      fail(file, lineNumber, `action reference must include a pinned SHA: ${actionReference}`);
-      return;
-    }
-
-    if (actionPath === "actions/cache" || actionPath.startsWith("actions/cache/")) {
-      fail(file, lineNumber, "`actions/cache` and its sub-actions are forbidden");
-      return;
-    }
-
-    const expectedSha = allowList.get(actionPath);
-    if (!expectedSha) {
-      fail(file, lineNumber, `third-party action ${actionPath} is not in the allow-list`);
-      return;
-    }
-
-    if (ref !== expectedSha) {
-      fail(file, lineNumber, `${actionPath} must be pinned to ${expectedSha}, found ${ref}`);
-    }
-  });
+  walk(workflow, { root: true });
+  if (fileName === "release.yml") checkOidcPublishJob(file, workflow);
 }
 
 if (existsSync(workflowDir)) {
   for (const entry of readdirSync(workflowDir)) {
-    if (entry.endsWith(".yml") || entry.endsWith(".yaml")) {
-      checkFile(join(workflowDir, entry));
-    }
+    if (entry.endsWith(".yml") || entry.endsWith(".yaml")) checkFile(join(workflowDir, entry));
   }
 }
 

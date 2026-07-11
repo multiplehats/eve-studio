@@ -19,6 +19,7 @@
     "check:release-artifacts": "node scripts/check-release-artifacts.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0"
+    "@changesets/cli": "2.31.0",
+    "yaml": "2.9.0"
   }
 }
