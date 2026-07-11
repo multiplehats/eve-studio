@@ -4,6 +4,19 @@
   "type": "module",
   "description": "Zero-config observability UI for Eve agents",
   "license": "MIT",
+  "homepage": "https://github.com/multiplehats/eve-studio#readme",
+  "bugs": {
+    "url": "https://github.com/multiplehats/eve-studio/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/multiplehats/eve-studio.git",
+    "directory": "packages/studio"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": { "node": ">=24" },
   "bin": { "eve-studio": "./dist/cli.js" },
   "files": ["dist"],

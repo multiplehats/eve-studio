@@ -2,6 +2,21 @@
   "name": "@eve-studio/extension",
   "version": "0.1.0",
   "type": "module",
+  "description": "Eve extension that forwards local agent session events to eve-studio",
+  "license": "MIT",
+  "homepage": "https://github.com/multiplehats/eve-studio#readme",
+  "bugs": {
+    "url": "https://github.com/multiplehats/eve-studio/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/multiplehats/eve-studio.git",
+    "directory": "packages/extension"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "eve": {
     "extension": "./ext"
   },

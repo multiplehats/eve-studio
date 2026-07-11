@@ -9,6 +9,16 @@
     "typecheck": "pnpm -r typecheck",
     "smoke:capture": "node scripts/smoke-capture.mjs",
     "build:studio": "pnpm --filter @eve-studio/ui build && pnpm --filter eve-studio build && node scripts/copy-ui.mjs",
-    "smoke:studio": "pnpm build:studio && node scripts/smoke-studio.mjs"
+    "smoke:studio": "pnpm build:studio && node scripts/smoke-studio.mjs",
+    "build:release": "pnpm --filter @eve-studio/extension build && pnpm build:studio",
+    "changeset": "changeset",
+    "changeset:status": "changeset status --since=origin/main",
+    "changeset:version": "changeset version",
+    "check:workflows": "node scripts/check-workflows.mjs",
+    "check:changesets": "changeset status --since=origin/main && node scripts/check-changeset-coverage.mjs",
+    "check:release-artifacts": "node scripts/check-release-artifacts.mjs"
+  },
+  "devDependencies": {
+    "@changesets/cli": "2.31.0"
   }
 }
