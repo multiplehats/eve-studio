@@ -7,7 +7,7 @@ import { once } from "node:events";
 
 const PROBE = "/tmp/eve-studio-m0-eval.ndjson";
 const CFILE = "/tmp/eve-studio-m0-collector.ndjson";
-const DEMO = new URL("../../examples/demo-agent", import.meta.url).pathname;
+const DEMO = new URL("../../apps/demo-agent", import.meta.url).pathname;
 const EVENTS_DIR = join(DEMO, ".workflow-data/events");
 
 rmSync(PROBE, { force: true });

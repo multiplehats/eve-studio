@@ -10,7 +10,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // Non-fatal artifact dump so the two required observations can be done off ONE paid run.
 const DUMP_DIR = process.env.M0_SCRATCH_DIR ?? "/tmp/eve-studio-m0";
 mkdirSync(DUMP_DIR, { recursive: true });
-const EVENTS_DIR = new URL("../../examples/demo-agent/.workflow-data/events", import.meta.url).pathname;
+const EVENTS_DIR = new URL("../../apps/demo-agent/.workflow-data/events", import.meta.url).pathname;
 
 // Optional, non-gate: snapshot the .workflow-data events dir (name -> mtimeMs) so we can
 // tell which event files appeared *during* our turn and whether writes were real-time.
@@ -28,7 +28,7 @@ function snapshotEventsDir() {
 
 rmSync(PROBE, { force: true });
 const server = spawn("pnpm", ["exec", "eve", "dev", "--no-ui", "--port", String(PORT)], {
-  cwd: new URL("../../examples/demo-agent", import.meta.url).pathname,
+  cwd: new URL("../../apps/demo-agent", import.meta.url).pathname,
   env: { ...process.env, EVE_STUDIO_PROBE_FILE: PROBE },
   stdio: "inherit",
 });

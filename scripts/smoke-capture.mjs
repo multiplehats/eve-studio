@@ -21,7 +21,7 @@ const collector = spawn("node", ["scripts/m0/collector.mjs"], {
 await new Promise((r) => setTimeout(r, 500));
 
 const evalRun = spawn("pnpm", ["exec", "eve", "eval", "m0-probe", "--verbose"], {
-  cwd: new URL("../examples/demo-agent", import.meta.url).pathname,
+  cwd: new URL("../apps/demo-agent", import.meta.url).pathname,
   env: { ...process.env, EVE_STUDIO_PORT: "43118" },
   stdio: "inherit",
 });

@@ -10,7 +10,7 @@ importers:
 
   .: {}
 
-  examples/demo-agent:
+  apps/demo-agent:
     dependencies:
       '@ai-sdk/openai-compatible':
         specifier: ^3.0.7

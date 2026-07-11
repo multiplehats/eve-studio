@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 // EVE_STUDIO_PORT, so capture pairs with the smoke's port automatically).
 const PORT = 43119;
 const BASE = `http://127.0.0.1:${PORT}`;
-const DEMO = fileURLToPath(new URL("../examples/demo-agent", import.meta.url));
+const DEMO = fileURLToPath(new URL("../apps/demo-agent", import.meta.url));
 const CLI = fileURLToPath(new URL("../packages/studio/dist/cli.js", import.meta.url));
 // The eve pin's single source of truth is packages/studio/package.json dependencies.eve.
 const EVE_PIN = JSON.parse(readFileSync(fileURLToPath(new URL("../packages/studio/package.json", import.meta.url)), "utf8")).dependencies.eve;

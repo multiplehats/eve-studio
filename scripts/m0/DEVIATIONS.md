@@ -27,7 +27,7 @@ from this file plus script outputs.
   `export { default } from "@acme/crm"` as a valid form (exactly what we used).
 - **Mount namespace = mount filename** — as planned. `mountNamespace()` in
   `extensions.js` derives the namespace from the file basename (minus extension), so
-  mount `examples/demo-agent/agent/extensions/studio.ts` yields namespace `studio`.
+  mount `apps/demo-agent/agent/extensions/studio.ts` yields namespace `studio`.
 - **Hook context shape** — as planned. `HookContext` extends `SessionContext`; the
   session id is exposed as `ctx.session.id` (string). Runtime stream events carry a
   top-level `type` and `meta.at` (`HandleMessageStreamEventMeta { at: string }`), matching
@@ -41,7 +41,7 @@ from this file plus script outputs.
   `/eve/v1/info` returned HTTP 500 with
   `[TSCONFIG_ERROR] Failed to load tsconfig for '...node_modules/@eve-studio/extension/tsconfig.json': Tsconfig not found`.
   Root cause: eve resolves the mounted extension through the pnpm symlink at
-  `examples/demo-agent/node_modules/@eve-studio/extension` (→ `packages/extension`). The
+  `apps/demo-agent/node_modules/@eve-studio/extension` (→ `packages/extension`). The
   bundler reads `tsconfig.json` there, but its `extends: "../../tsconfig.base.json"`
   resolves against the *logical* symlink path (`node_modules/@eve-studio/extension/`),
   so `../../` lands in `node_modules/`, where `tsconfig.base.json` does not exist. Classic
@@ -165,7 +165,7 @@ Artifacts from this run (scratchpad, not committed): `stream-events.json`,
 
 ### Observation 2 — .workflow-data real-time check
 
-The verify script snapshots `examples/demo-agent/.workflow-data/events/` (file → mtimeMs)
+The verify script snapshots `apps/demo-agent/.workflow-data/events/` (file → mtimeMs)
 before the session and after, and dumps the delta (non-fatal, not a gate).
 
 - **(a) Did new event files for OUR session's wrun id appear?** Yes. 13 new files named
@@ -315,7 +315,7 @@ bug to patch around.
    `evals/runner/discover.js`) throws `Missing required eval config at
    evals/evals.config.ts` and `eve eval` exits code 2 BEFORE any turn runs if the file is
    absent. First run reproduced exactly this (`evalExitCode: 2`, all gates false). Fix:
-   added `examples/demo-agent/evals/evals.config.ts` = `defineEvalConfig({})` (empty; the
+   added `apps/demo-agent/evals/evals.config.ts` = `defineEvalConfig({})` (empty; the
    M0 eval uses no `t.judge.*`, so no judge model needed). Verified valid against
    `define-eval-config.d.ts`.
 
@@ -346,7 +346,7 @@ For the eval's OWN session id (raw before/after counts are polluted by stale re-
 runs — measured per-sid instead):
 
 - **(a) NEW engine-event files appeared:** YES, in the project's own
-  `examples/demo-agent/.workflow-data/` (no temp path). The eval's session produced **11
+  `apps/demo-agent/.workflow-data/` (no temp path). The eval's session produced **11
   files** in `.workflow-data/events/` (`run_created`, `run_started`, `step_created` x2,
   `step_started` x2, `step_completed` x2, `hook_created` x3) PLUS a durable wire stream
   under `.workflow-data/streams/` (`runs/<runId>.json` manifest + 9 `.bin` chunks in
@@ -467,7 +467,7 @@ for both).
 - Startup noise (not a finding, same phenomenon Tasks 3/4 already noted): `eve eval` logs
   `Re-enqueued N active run(s) on startup` plus repeated `Queue message failed ... Unhandled
   queue` for stale parked runs from prior M0 sessions in the shared local
-  `examples/demo-agent/.workflow-data/` queue. Harmless — the eval's own session
+  `apps/demo-agent/.workflow-data/` queue. Harmless — the eval's own session
   (`wrun_01KX5Q8VNX5ZFVSD829NTBM9S4`) ran and completed (parked) cleanly with full 9-event
   parity, matching every prior task's observation of this queue.
 - **Re-run fragility (for `pnpm smoke:capture` as a recurring command).** This run's
@@ -476,20 +476,20 @@ for both).
   (e.g. a future eve version that resumes rather than rejects parked runs), the per-session
   loop would evaluate contiguity/turn-boundary/leak on that extra session too, and a
   genuinely stale/partial session could fail the smoke spuriously. Not observed this run;
-  noted as a known limitation of reusing the shared `examples/demo-agent/.workflow-data/`
+  noted as a known limitation of reusing the shared `apps/demo-agent/.workflow-data/`
   queue across repeated invocations (same queue-accumulation phenomenon Tasks 3/4 recorded).
 
 ## Plan B
 
 ### Task 2: Free deterministic evals — mockModel fixture, terminal-lifecycle probe, committed envelope fixture
 
-Run date: 2026-07-10. `examples/demo-agent/agent/agent.ts` gained the `EVE_STUDIO_MOCK=1`
-branch (verbatim from the brief); `examples/demo-agent/evals/mock-probe.eval.ts` sends two
+Run date: 2026-07-10. `apps/demo-agent/agent/agent.ts` gained the `EVE_STUDIO_MOCK=1`
+branch (verbatim from the brief); `apps/demo-agent/evals/mock-probe.eval.ts` sends two
 turns (`"ping one"`, `"ping two"`) through the mock model. Ran with the API key physically
 absent from the environment:
 
 ```bash
-cd examples/demo-agent && env -u OPENROUTER_API_KEY EVE_STUDIO_MOCK=1 EVE_STUDIO_PORT=43118 pnpm exec eve eval mock-probe --verbose
+cd apps/demo-agent && env -u OPENROUTER_API_KEY EVE_STUDIO_MOCK=1 EVE_STUDIO_PORT=43118 pnpm exec eve eval mock-probe --verbose
 ```
 
 Result: **exit 0**, `✓ mock-probe`, "Results: 1 passed (1 total)". No OpenRouter traffic was
@@ -554,7 +554,7 @@ Verbatim `step.completed` envelope (turn 1, `seq: 6`):
 **Confirmed path: `event.data.usage`** on `step.completed`, containing
 `{inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens}`. **No `costUsd` field is
 present** — this matches the installed `MockModelUsage` type
-(`examples/demo-agent/node_modules/eve/dist/src/evals/mock-model.d.ts`), which declares only
+(`apps/demo-agent/node_modules/eve/dist/src/evals/mock-model.d.ts`), which declares only
 `inputTokens?: number` and `outputTokens?: number`; `cacheReadTokens`/`cacheWriteTokens`
 are additive fields eve itself stamps (defaulted to `0` for the mock path), not part of
 `MockModelResponse`. `costUsd` is a real-provider-only field (OpenRouter's `includeUsage`
@@ -590,7 +590,7 @@ session's `session.started` line, not `event.data.eveVersion`.
 
 #### Terminal-lifecycle probe (Step 6, carry-forward 3)
 
-1. `grep -n -iE "end|close|complete|finish|stop" examples/demo-agent/node_modules/eve/dist/src/evals/types.d.ts`
+1. `grep -n -iE "end|close|complete|finish|stop" apps/demo-agent/node_modules/eve/dist/src/evals/types.d.ts`
    — no session-ending method exists on `EveEvalContext`, `EveEvalSession`, or
    `EveEvalTurn`. The only lifecycle surface is the read-only
    `status: "completed" | "failed" | "waiting"` field on `EveEvalTurn`/execution facts;
@@ -602,7 +602,7 @@ session's `session.started` line, not `event.data.eveVersion`.
    `mockModel(() => { throw new Error("probe: forced mock failure"); })`. Ran once, free
    (`env -u OPENROUTER_API_KEY EVE_STUDIO_MOCK=1 EVE_STUDIO_MOCK_THROW=1 EVE_STUDIO_PORT=43118
    pnpm exec eve eval terminal-probe --verbose`), against a throwaway
-   `examples/demo-agent/evals/terminal-probe.eval.ts` (`t.send("trigger failure")`, no
+   `apps/demo-agent/evals/terminal-probe.eval.ts` (`t.send("trigger failure")`, no
    assertions). Result: eval harness still reports **exit 0 / "✓ terminal-probe" / 1 passed**
    (eve's harness treats a parked/errored turn as a pass unless an assertion explicitly
    checks turn status) — but the wire capture (7 envelopes, one session
@@ -657,7 +657,7 @@ $PIDS`) rather than assuming bare `xargs kill` no-ops safely.
 
 #### Fresh `.workflow-data/` layout notes (Step 7, for Task 6)
 
-`examples/demo-agent/.workflow-data/` is **not exclusively fresh** — it accumulates runs
+`apps/demo-agent/.workflow-data/` is **not exclusively fresh** — it accumulates runs
 across every prior M0/Plan-A/Plan-B task in this repo (7+ prior `wrun_*` directories already
 present before this task's run). Task 6 must identify its own run by sessionId, not assume
 an empty directory. **This task's own Step 6 throw-probe also added a second, unrelated run**
