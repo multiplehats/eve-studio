@@ -120,7 +120,7 @@ describe("counters LRU", () => {
     // Touch s0 again so it becomes most-recently-active (seq must continue at 1).
     const touched = buildEnvelope({ type: "x" }, { session: { id: "s0" } }, state);
     expect(touched.seq).toBe(1);
-    // A new 1001st session evicts the LRU entry — which is now s1, not s0.
+    // A new 1001st session evicts the LRU entry, which is now s1, not s0.
     buildEnvelope({ type: "x" }, { session: { id: "s-new" } }, state);
     expect(state.counters.size).toBe(1000);
     expect(state.counters.has("s1")).toBe(false);

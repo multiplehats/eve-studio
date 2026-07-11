@@ -76,7 +76,7 @@ check("healthEveVersion", (await (await fetch(`${BASE}/health`)).json()).eveVers
 const liveSessionId = s.sessionId;
 await stop(studio);
 
-// --- Phase 2: fresh Studio, no eval — disk scan must rediscover the session ---
+// --- Phase 2: fresh Studio, no eval: disk scan must rediscover the session ---
 const studio2 = startStudio(["--scan-disk"]);
 await waitHealthy();
 const snap2 = await (await fetch(`${BASE}/api/sessions`)).json();

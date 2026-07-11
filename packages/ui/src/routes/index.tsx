@@ -10,7 +10,7 @@ function EmptyState() {
       <Logo className="size-11" />
       <h1 className="mt-4 text-xl font-semibold tracking-tight">Eve Studio</h1>
       <p className="text-muted-foreground mt-1.5 text-sm">
-        Select a session from the sidebar — or run your agent to see it appear live.
+        Select a session from the sidebar, or run your agent to see it appear live.
       </p>
     </div>
   )

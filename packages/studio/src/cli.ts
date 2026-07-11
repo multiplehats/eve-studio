@@ -35,7 +35,7 @@ async function resolveProject(): Promise<string> {
   }
   if (candidates.length === 1) return candidates[0];
   if (!process.stdin.isTTY) {
-    die(`multiple agent projects found — pass --project:\n${candidates.map((c) => `  ${c}`).join("\n")}`);
+    die(`multiple agent projects found, pass --project:\n${candidates.map((c) => `  ${c}`).join("\n")}`);
   }
   candidates.forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -48,7 +48,7 @@ async function resolveProject(): Promise<string> {
 const project = await resolveProject();
 
 const eveVersion = installedEveVersion(project);
-if (eveVersion === undefined) die(`eve is not installed in ${project} — run your package manager's install first`);
+if (eveVersion === undefined) die(`eve is not installed in ${project}. Run your package manager's install first.`);
 if (!meetsMinimum(eveVersion)) {
   die(`eve-studio needs eve >= 0.22.3 (found ${eveVersion}). Upgrade: ${detectPackageManager(project)} add eve@latest`);
 }
@@ -65,9 +65,9 @@ if (!isExtensionMounted(project)) {
     } catch (err) {
       if (mountFile) {
         rmSync(mountFile, { force: true });
-        console.error(`eve-studio: removed ${mountFile} — recreate it after the install succeeds (steps below)`);
+        console.error(`eve-studio: removed ${mountFile}. Recreate it after the install succeeds (steps below).`);
       }
-      console.error(`eve-studio: mount failed (${err instanceof Error ? err.message : err}) — continuing without it`);
+      console.error(`eve-studio: mount failed (${err instanceof Error ? err.message : err}); continuing without it`);
       console.error(mountInstructions(project));
     }
   } else {
@@ -94,13 +94,13 @@ try {
   });
   console.log(`eve-studio: listening on ${server.url}`);
   if (hasUi) console.log(`eve-studio: open ${server.url} in your browser`);
-  else console.log(`eve-studio: UI assets not bundled — sessions snapshot at ${server.url}/api/sessions`);
+  else console.log(`eve-studio: UI assets not bundled; sessions snapshot at ${server.url}/api/sessions`);
   const shutdown = () => { void server.close().then(() => process.exit(0)); };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 } catch (err) {
   if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
-    die(`port ${port} is taken — most likely another eve-studio owns it. Stop it or rerun with --port <n> AND set EVE_STUDIO_PORT=<n> in the agent's environment so the extension forwards to the same port.`);
+    die(`port ${port} is taken, most likely by another eve-studio. Stop it or rerun with --port <n> AND set EVE_STUDIO_PORT=<n> in the agent's environment so the extension forwards to the same port.`);
   }
   throw err;
 }

@@ -63,7 +63,7 @@ export function startStudioServer(opts: StudioServerOptions): Promise<StudioServ
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       size += (chunk as Buffer).length;
-      if (size > MAX_BODY_BYTES) { json(res, 413, { error: "too large" }); req.resume(); return; }  // drain, don't destroy — destroying races the response onto a torn socket
+      if (size > MAX_BODY_BYTES) { json(res, 413, { error: "too large" }); req.resume(); return; }  // drain, don't destroy: destroying races the response onto a torn socket
       chunks.push(chunk as Buffer);
     }
     let parsed: unknown;

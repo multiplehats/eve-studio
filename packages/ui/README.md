@@ -1,6 +1,6 @@
 # @eve-studio/ui
 
-Browser UI for [eve-studio](../studio). Private package — it is never published;
+Browser UI for [eve-studio](../studio). Private package: it is never published;
 its build output ships inside the `eve-studio` package as static assets
 (`packages/studio/dist/ui`), served by the collector on port 43110.
 
@@ -14,12 +14,12 @@ Data comes from the collector API: `GET /api/sessions`, `GET /api/sessions/<id>`
 ## Development
 
 ```bash
-pnpm --filter eve-studio build      # once — the dev collector imports its dist
+pnpm --filter eve-studio build      # once; the dev collector imports its dist
 pnpm dev:collector                  # terminal 1: fixture-replay collector on 43110
 pnpm dev                            # terminal 2: vite on 43120, /api proxied to 43110
 ```
 
-Open http://127.0.0.1:43120 — the recorded mock-eval session appears in the
+Open http://127.0.0.1:43120. The recorded mock-eval session appears in the
 sidebar. No paid API calls: the fixture was recorded once under
 `EVE_STUDIO_MOCK=1`.
 

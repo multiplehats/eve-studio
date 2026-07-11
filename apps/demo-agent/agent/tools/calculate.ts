@@ -3,8 +3,8 @@ import { z } from "zod";
 
 /**
  * Evaluates a basic arithmetic expression made of numbers, the operators
- * + - * / and parentheses. Implemented as a small recursive-descent parser —
- * NO eval() / Function() — so untrusted input can never execute code.
+ * + - * / and parentheses. Implemented as a small recursive-descent parser:
+ * no eval() / Function(), so untrusted input can never execute code.
  *
  * Grammar:
  *   expr   = term   { ("+" | "-") term }

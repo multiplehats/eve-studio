@@ -76,7 +76,7 @@ describe("scanWorkflowData", () => {
       writeFileSync(join(streamDir, `chnk_${String(i).padStart(4, "0")}.bin`), encodeChunk(e));
     });
     const { sessions, skipped } = scanWorkflowData(root);
-    expect(sessions).toHaveLength(0); // decodable but filtered — noise, not an error
+    expect(sessions).toHaveLength(0); // decodable but filtered: noise, not an error
     expect(skipped).toBe(0); // filtering is not a failure
   });
 });

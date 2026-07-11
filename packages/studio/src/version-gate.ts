@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** Reads the INSTALLED eve version — never the package.json range (pnpm catalog: ranges are unreadable). */
+/** Reads the INSTALLED eve version, never the package.json range (pnpm catalog: ranges are unreadable). */
 export function installedEveVersion(projectRoot: string): string | undefined {
   try {
     const pkg = JSON.parse(readFileSync(join(projectRoot, "node_modules", "eve", "package.json"), "utf8"));

@@ -106,7 +106,7 @@ describe("static UI serving", () => {
     mkdirSync(join(dir, "assets"), { recursive: true });
     writeFileSync(join(dir, "_shell.html"), "<!doctype html><title>Eve Studio</title>");
     writeFileSync(join(dir, "assets", "app.js"), "console.log(1)");
-    writeFileSync(join(tmp, "secret.txt"), "TOP-SECRET");   // sibling of staticDir — must never be reachable
+    writeFileSync(join(tmp, "secret.txt"), "TOP-SECRET");   // sibling of staticDir: must never be reachable
     return dir;
   }
   async function bootStatic() {
@@ -143,7 +143,7 @@ describe("static UI serving", () => {
     expect(getIngest.headers.get("content-type")).toContain("application/json");
     // Two encodings of "../secret.txt". The WHATWG URL parser collapses %2e%2e dot
     // segments and normalize() resolves the decoded "..", so both must resolve INSIDE
-    // the UI dir (-> missing asset, 404) — and must never leak the sibling file.
+    // the UI dir (-> missing asset, 404), and must never leak the sibling file.
     for (const path of ["/%2e%2e/secret.txt", "/..%2fsecret.txt"]) {
       const res = await fetch(`${s.url}${path}`);
       expect(res.status).toBe(404);

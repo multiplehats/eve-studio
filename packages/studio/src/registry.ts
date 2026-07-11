@@ -169,11 +169,11 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
 
   /**
    * Gap recovery. A gap whose prefix was never received (reducedUpTo below the
-   * lowest position we hold) cannot fill from stored events — mid-session
+   * lowest position we hold) cannot fill from stored events: mid-session
    * attach and forwarder maxQueue overflow both produce it. After a dwell
    * (tolerates shuffled 25ms-scale batches), or immediately under cap pressure
    * (`force`), restart the reducer at the lowest held position and flag the
-   * session — a degraded-but-live view beats a frozen one, and eviction needs
+   * session. A degraded-but-live view beats a frozen one, and eviction needs
    * reducedUpTo to move or the byte cap is dead.
    */
   function maybeRebase(rec: SessionRecord, force: boolean): void {
@@ -198,10 +198,10 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
         if (rec.reducerError === undefined) {
           const before = rec.reducedUpTo;
           maybeRebase(rec, true);
-          if (rec.reducedUpTo === before) break;             // nothing rebasable: transient contiguous run — allow, advance will consume it
-          continue;                                          // rebase moved reducedUpTo — retry the victim search
+          if (rec.reducedUpTo === before) break;             // nothing rebasable (transient contiguous run): allow, advance will consume it
+          continue;                                          // rebase moved reducedUpTo: retry the victim search
         }
-        victim = lowestStored(rec);                          // reducer dead: cap survives it — evict oldest unconditionally
+        victim = lowestStored(rec);                          // reducer dead, cap survives it: evict oldest unconditionally
         if (!Number.isFinite(victim)) break;
       }
       const evicted = rec.events.get(victim)!;
@@ -226,10 +226,10 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
           // Hook process restarted mid-session: seq is no longer a stream
           // position (Global Constraint 3). Append honestly after everything
           // we trust and flag the session. LIMITATION, surfaced via the
-          // degraded flag: post-reset positions are synthetic — they no longer
+          // degraded flag: post-reset positions are synthetic. They no longer
           // dedup against forwarder retransmits or merge with disk positions.
           // No silent repair is attempted (design: replay/disk would have to
-          // become authoritative — that reconciliation is out of Plan B scope).
+          // become authoritative, and that reconciliation is out of Plan B scope).
           rec.summary.degraded = "epoch-reset";
           position = rec.summary.maxPosition + 1;
         } else {

@@ -65,6 +65,6 @@ describe("mount", () => {
     const { command, mountFile } = scaffoldMount(p);
     expect(command).toEqual(["pnpm", "add", "@eve-studio/extension"]);
     expect(mountFile).toBe(join(p, "agent", "extensions", "studio.ts"));
-    expect(isExtensionMounted(p)).toBe(false);             // dep not installed yet — caller spawns the command
+    expect(isExtensionMounted(p)).toBe(false);             // dep not installed yet: caller spawns the command
   });
 });

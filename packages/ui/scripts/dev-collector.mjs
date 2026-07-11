@@ -1,6 +1,6 @@
 // Dev-only: replays the recorded mock-eval fixture through the REAL eve-studio
 // server on 43110 so `pnpm dev` (43120) has data behind its /api proxy.
-// Zero paid calls — the fixture was recorded once under EVE_STUDIO_MOCK=1.
+// Zero paid calls: the fixture was recorded once under EVE_STUDIO_MOCK=1.
 // Requires `pnpm --filter eve-studio build` first (imports eve-studio's dist).
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"

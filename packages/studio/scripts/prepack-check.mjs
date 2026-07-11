@@ -5,6 +5,6 @@
 import { existsSync } from "node:fs";
 
 if (!existsSync(new URL("../dist/ui/_shell.html", import.meta.url))) {
-  console.error("eve-studio prepack: dist/ui/_shell.html missing — run `pnpm build:studio` at the repo root before packing/publishing.");
+  console.error("eve-studio prepack: dist/ui/_shell.html missing. Run `pnpm build:studio` at the repo root before packing/publishing.");
   process.exit(1);
 }

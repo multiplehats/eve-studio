@@ -46,7 +46,7 @@ try {
   const { sessionId } = await res.json();
   await sleep(15_000); // let the turn complete
 
-  // IMPORTANT: the stream endpoint live-follows — it never closes the connection
+  // IMPORTANT: the stream endpoint live-follows. It never closes the connection
   // for a waiting session, so res.text() would hang forever. Drain NDJSON lines
   // with an idle timeout instead; going idle after the replay burst = replay done.
   const streamEvents = await readNdjsonUntilIdle(
@@ -82,7 +82,7 @@ try {
 
   const findings = { hookFired, orderMatchesStream, seqAlignsWithStartIndex, eventIdField };
   console.log(JSON.stringify(findings, null, 2));
-  // Diagnostics printed only when a gate fails — never weaken the assertion, expose the diff.
+  // Diagnostics printed only when a gate fails: never weaken the assertion, expose the diff.
   if (!hookFired || !orderMatchesStream || !seqAlignsWithStartIndex) {
     console.error("--- GATE FAIL DIAGNOSTICS ---");
     console.error("apiSessionId:", sessionId);

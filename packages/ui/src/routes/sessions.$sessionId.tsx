@@ -15,7 +15,7 @@ function SessionPage() {
   const { data: health } = useHealth()
 
   if (isPending) return <CenterNote text="Loading session…" />
-  if (isError || !data) return <CenterNote text="Session not found — Studio may have restarted since this link was made." />
+  if (isError || !data) return <CenterNote text="Session not found. Studio may have restarted since this link was made." />
 
   const reduced = data.reducerError === undefined ? (data.reducedState as EveMessageData | null) : null
 
@@ -26,10 +26,10 @@ function SessionPage() {
         <SessionBanners summary={data.summary} reducerError={data.reducerError} studioEveVersion={health?.eveVersion} />
         <div className="flex-1 overflow-y-auto">
           {reduced && reduced.messages.length > 0 ? (
-            <MessageList messages={reduced.messages} />
+            <MessageList messages={reduced.messages} events={data.events} />
           ) : (
             <CenterNote
-              text={data.reducerError ? "Conversation view unavailable (reducer failed) — see banner." : "No conversation yet."}
+              text={data.reducerError ? "Conversation view unavailable (reducer failed): see banner." : "No conversation yet."}
             />
           )}
         </div>

@@ -1,102 +1,89 @@
-import type { EveMessage, EveMessagePart } from "eve-studio"
+import { useMemo, useState } from "react"
+import type { EveMessage, StoredEvent } from "eve-studio"
 
-import { Badge, type BadgeProps } from "@/components/reui/badge"
-import { Logo } from "./logo"
+import { formatDuration, groupTurns, type Turn } from "@/lib/session-turns"
+import { ArrowRight01Icon, Clock01Icon, Wrench01Icon } from "@hugeicons/core-free-icons"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { PartView } from "./message-parts"
+import { TurnDrawer } from "./turn-drawer"
 
-export function MessageList({ messages }: { messages: readonly EveMessage[] }) {
+export function MessageList({
+  messages,
+  events = [],
+}: {
+  messages: readonly EveMessage[]
+  events?: readonly StoredEvent[]
+}) {
+  const turns = useMemo(() => groupTurns(messages, events), [messages, events])
+  const [openTurn, setOpenTurn] = useState<Turn | null>(null)
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-8">
-      {messages.map((m) => (
-        <MessageView key={m.id} message={m} />
-      ))}
-    </div>
-  )
-}
-
-function MessageView({ message }: { message: EveMessage }) {
-  const parts = message.parts.map((p, i) => <PartView key={i} part={p} />)
-  if (message.role === "user") {
-    return <div className="bg-muted ml-auto max-w-[85%] rounded-2xl px-4 py-2.5">{parts}</div>
-  }
-  return (
-    <div className="flex items-start gap-3">
-      <Logo className="mt-0.5 shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        {parts}
-        {message.metadata?.status === "streaming" && (
-          <span className="bg-foreground/70 h-4 w-2 animate-pulse rounded-sm" aria-label="streaming" />
-        )}
+    <>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-8">
+        {turns.map((turn) => (
+          <TurnView key={turn.id} turn={turn} onOpen={() => setOpenTurn(turn)} />
+        ))}
       </div>
-    </div>
+      <TurnDrawer
+        turn={openTurn}
+        onOpenChange={(open) => {
+          if (!open) setOpenTurn(null)
+        }}
+      />
+    </>
   )
 }
 
-const TOOL_STATE: Record<string, { label: string; variant: BadgeProps["variant"] }> = {
-  "input-streaming": { label: "calling…", variant: "info-light" },
-  "input-available": { label: "called", variant: "info-light" },
-  "approval-requested": { label: "awaiting approval", variant: "warning-light" },
-  "approval-responded": { label: "approval answered", variant: "warning-light" },
-  "output-available": { label: "done", variant: "success-light" },
-  "output-error": { label: "error", variant: "destructive-light" },
-  "output-denied": { label: "denied", variant: "destructive-light" },
-}
-
-function PartView({ part }: { part: EveMessagePart }) {
-  switch (part.type) {
-    case "text":
-      return <p className="text-sm leading-relaxed whitespace-pre-wrap">{part.text}</p>
-    case "reasoning":
-      return (
-        <details className="text-muted-foreground text-sm">
-          <summary className="cursor-pointer text-xs font-medium select-none">Reasoning</summary>
-          <p className="mt-1 border-l-2 pl-3 whitespace-pre-wrap">{part.text}</p>
-        </details>
-      )
-    case "step-start":
-      // ChatGPT-style canvas: steps read as one continuous reply, so the
-      // boundary is breathing room, not a rule line.
-      return <div className="h-1" role="separator" />
-    case "dynamic-tool": {
-      const state = TOOL_STATE[part.state] ?? { label: part.state, variant: "outline" as const }
-      return (
-        <details className="rounded-md border px-3 py-2 text-sm">
-          <summary className="flex cursor-pointer items-center gap-2 select-none">
-            <span className="font-mono text-xs font-medium">{part.toolName}</span>
-            <Badge variant={state.variant} size="sm">{state.label}</Badge>
-          </summary>
-          {part.input !== undefined && <ToolJson label="Input" value={part.input} />}
-          {part.output !== undefined && <ToolJson label="Output" value={part.output} />}
-          {part.errorText !== undefined && <ToolJson label="Error" value={part.errorText} />}
-        </details>
-      )
-    }
-    case "authorization":
-      return (
-        <div className="rounded-md border px-3 py-2 text-sm">
-          <span className="font-medium">{part.displayName}</span>{" "}
-          <span className="text-muted-foreground text-xs">authorization {part.state}</span>
-          {part.state === "required" && part.authorization?.url && (
-            <p className="mt-1 text-xs break-all">
-              {part.authorization.url}
-              {part.authorization.userCode ? ` · code ${part.authorization.userCode}` : ""}
-            </p>
+function TurnView({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
+  return (
+    <>
+      {turn.user && (
+        <div className="bg-muted ml-auto max-w-[85%] rounded-2xl px-4 py-2.5">
+          {turn.user.parts.map((part, i) => (
+            <PartView key={i} part={part} />
+          ))}
+        </div>
+      )}
+      {turn.assistant && (
+        <div className="flex min-w-0 flex-col gap-2">
+          <TurnMetaRow turn={turn} onOpen={onOpen} />
+          {turn.assistant.parts.map((part, i) => (
+            <PartView key={i} part={part} />
+          ))}
+          {turn.assistant.metadata?.status === "streaming" && (
+            <span className="bg-foreground/70 h-4 w-2 animate-pulse rounded-sm" aria-label="streaming" />
           )}
         </div>
-      )
-    case "file":
-      return <Badge variant="outline" className="w-fit font-mono text-xs">{part.filename ?? part.mediaType}</Badge>
-    default:
-      return null
-  }
+      )}
+    </>
+  )
 }
 
-function ToolJson({ label, value }: { label: string; value: unknown }) {
+// Clickable per-turn summary — the only affordance that opens the drawer (inline
+// tool cards keep their own expand). Shows the tool/step counts we have; turn
+// duration is intentionally absent (not in the captured event stream).
+function TurnMetaRow({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
   return (
-    <div className="mt-2">
-      <p className="text-muted-foreground text-xs font-medium">{label}</p>
-      <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
-        {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
-      </pre>
-    </div>
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Open turn ${turn.id} — view and copy`}
+      className="text-muted-foreground hover:text-foreground hover:bg-muted -mx-1.5 flex w-fit cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors"
+    >
+      {turn.toolCount > 0 && (
+        <span className="flex items-center gap-1">
+          <HugeiconsIcon icon={Wrench01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          {turn.toolCount} {turn.toolCount === 1 ? "tool" : "tools"}
+        </span>
+      )}
+      {turn.durationMs !== undefined && (
+        <span className="flex items-center gap-1">
+          <HugeiconsIcon icon={Clock01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          {formatDuration(turn.durationMs)}
+        </span>
+      )}
+      <span className="font-medium">View &amp; copy</span>
+      <HugeiconsIcon icon={ArrowRight01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+    </button>
   )
 }

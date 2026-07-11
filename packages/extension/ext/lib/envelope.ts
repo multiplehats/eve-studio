@@ -9,7 +9,7 @@ export interface EnvelopeState {
   hookEpoch: string;
   project: { name: string; root: string };
   processInfo: { instanceId: string; kind: string; pid: number };
-  group?: string | undefined;   // OPTIONAL — the existing tests' state literals must stay compiling as-is
+  group?: string | undefined;   // OPTIONAL: the existing tests' state literals must stay compiling as-is
 }
 
 export interface Envelope {
@@ -29,8 +29,8 @@ export interface Envelope {
  * Long-lived hook processes see many sessions; the counters map must not grow
  * unbounded (Plan A review carry-forward 4). True LRU: touching a session
  * refreshes its recency, so only sessions idle longest are evicted. An evicted
- * session that later resumes restarts at seq 0 under the same hookEpoch — the
- * cap is set far above realistic concurrent-session counts to keep that
+ * session that later resumes restarts at seq 0 under the same hookEpoch, so
+ * the cap is set far above realistic concurrent-session counts to keep that
  * unreachable in practice.
  */
 const MAX_TRACKED_SESSIONS = 1000;

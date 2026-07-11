@@ -15,7 +15,7 @@ function sessionHasUserActivity(events: DiskSession["events"]): boolean {
 }
 
 /**
- * Same strip the extension applies on the live path (deliberately duplicated —
+ * Same strip the extension applies on the live path (deliberately duplicated:
  * separate published packages, no shared internal lib): drop messageSoFar from
  * message.appended, recursing into subagent.event wrappers, copy-on-write,
  * never mutating input. Mirrors packages/extension/ext/lib/envelope.ts.
@@ -37,7 +37,7 @@ function stripMessageSoFar(event: { type: string; data?: unknown }): { type: str
 
 /**
  * Recovers the sessionId from the chunk-directory name, not from decoded
- * event payloads or the run manifest — per DEVIATIONS §Plan B Task 2 Step 7:
+ * event payloads or the run manifest, per DEVIATIONS §Plan B Task 2 Step 7:
  * neither the `streams/runs/<sessionId>.json` manifest contents nor the
  * decoded `session.started` chunk carry the sessionId; the durable-store
  * layer's naming convention is the only source of truth. The stream dir is
@@ -68,7 +68,7 @@ function recoverAgent(events: DiskSession["events"]): string | undefined {
 /**
  * Decodes one chunk file's wire event. Per DEVIATIONS §Plan B Task 2 Step 7,
  * each `.bin` file is a short binary header, the ASCII marker "devl", then a
- * JSON array `[["Uint8Array", n], "<base64>"]` — the base64 element decodes
+ * JSON array `[["Uint8Array", n], "<base64>"]`. The base64 element decodes
  * to newline-terminated JSON text: `{"data":..., "type":..., "meta":{"at":...}}`.
  * We locate "devl" and JSON.parse everything after it rather than depending
  * on exact header byte lengths (observed to vary chunk to chunk).
@@ -96,14 +96,14 @@ export function scanWorkflowData(projectRoot: string): ScanResult {
         if (sessionId === undefined) { result.skipped++; continue; }
         const dir = join(chunksRoot, streamDir);
         // Ordering key per Task 2 probe: filename sort (ULIDs are
-        // lexicographically sortable and monotonically increasing) — no
+        // lexicographically sortable and monotonically increasing). No
         // per-chunk ordering field exists in the manifest.
         const files = readdirSync(dir).sort();
         const events = files.map((f, position) => {
           const event = decodeChunk(readFileSync(join(dir, f)));
           return { position, event: stripMessageSoFar(event) };
         });
-        if (!sessionHasUserActivity(events)) continue; // noise, not an error — not counted as skipped
+        if (!sessionHasUserActivity(events)) continue; // noise, not an error: not counted as skipped
         result.sessions.push({ sessionId, agent: recoverAgent(events), events });
       } catch {
         result.skipped++;

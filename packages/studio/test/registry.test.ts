@@ -105,7 +105,7 @@ describe("grouping and usage", () => {
 
   it("captures eveVersion from session.started", () => {
     const r = createRegistry();
-    // Pinned field path (DEVIATIONS §Plan B Task 2): event.data.runtime.eveVersion — NESTED under runtime.
+    // Pinned field path (DEVIATIONS §Plan B Task 2): event.data.runtime.eveVersion, nested under runtime.
     r.ingest(env("s", 0, "session.started", { event: { type: "session.started", data: { runtime: { eveVersion: "0.22.4" } } } }));
     expect(r.getSession("s")!.summary.eveVersion).toBe("0.22.4");
   });
@@ -171,7 +171,7 @@ describe("disk merge", () => {
     expect(rec.summary.status).toBe("waiting");
   });
 
-  it("DOCUMENTED LIMITATION: after an epoch reset, positions are synthetic — disk events colliding with them are dropped, no repair", () => {
+  it("DOCUMENTED LIMITATION: after an epoch reset, positions are synthetic, so disk events colliding with them are dropped with no repair", () => {
     const r = createRegistry();
     r.ingest(env("s", 0, "session.started"));
     r.ingest(env("s", 0, "message.completed", { hookEpoch: "epoch-2" }));   // reset -> stored at synthetic position 1
@@ -181,6 +181,6 @@ describe("disk merge", () => {
     expect(rec.events.find((e) => e.position === 1)!.event.type).toBe("message.completed");
     // This pins the honest behavior: degraded sessions surface the flag; they
     // are NOT silently reconciled. (In Plan B's flow, disk scan runs only at
-    // boot — before live traffic — so this ordering is an edge, not the norm.)
+    // boot, before live traffic, so this ordering is an edge, not the norm.)
   });
 });

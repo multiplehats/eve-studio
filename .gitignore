@@ -1,4 +1,7 @@
 node_modules/
+.output/
+.vercel/
+.tanstack/
 .env
 .env.*
 !.env.example

@@ -8,34 +8,34 @@ from this file plus script outputs.
 
 ### Key contract points (verified against installed dist)
 
-- **Discovery key `eve.extension`** — as planned. `discover/extensions.js`
+- **Discovery key `eve.extension`:** as planned. `discover/extensions.js`
   `locateExtensionMount` reads `f.eve?.extension` as the required source-root field;
   a missing/empty value raises `discover/extension-package-invalid` with the message
   "missing the `eve.extension` source-root field."
-- **Import path `eve/extension` (singular)** — as planned. `eve` package.json exports
+- **Import path `eve/extension` (singular):** as planned. `eve` package.json exports
   map has `"./extension"` (and `"./hooks"`); no `"./extensions"` key exists.
   `public/extension/index.js` re-exports `defineExtension`.
-- **Extension entry filename `ext/extension.ts`** — as planned. `discover-agent.js`
+- **Extension entry filename `ext/extension.ts`:** as planned. `discover-agent.js`
   requires the source-root entry to be `extension.ts` (or another supported module
   extension); `index.ts` is not a recognized slot.
-- **Hooks slot `ext/hooks/<name>.ts` via `defineHook` from `eve/hooks`** — as planned.
+- **Hooks slot `ext/hooks/<name>.ts` via `defineHook` from `eve/hooks`:** as planned.
   `defineHook` exported from `eve/hooks` (`public/definitions/hook.js`); the `"*"`
   wildcard key is documented as matching every accepted runtime stream event and runs
   after any typed handler.
-- **Mount = re-export default** — as planned. `locateExtensionMount` requires the mount
+- **Mount = re-export default:** as planned. `locateExtensionMount` requires the mount
   file to default-export a mounted extension; the dist's own diagnostic message gives
   `export { default } from "@acme/crm"` as a valid form (exactly what we used).
-- **Mount namespace = mount filename** — as planned. `mountNamespace()` in
+- **Mount namespace = mount filename:** as planned. `mountNamespace()` in
   `extensions.js` derives the namespace from the file basename (minus extension), so
   mount `apps/demo-agent/agent/extensions/studio.ts` yields namespace `studio`.
-- **Hook context shape** — as planned. `HookContext` extends `SessionContext`; the
+- **Hook context shape:** as planned. `HookContext` extends `SessionContext`; the
   session id is exposed as `ctx.session.id` (string). Runtime stream events carry a
   top-level `type` and `meta.at` (`HandleMessageStreamEventMeta { at: string }`), matching
   the probe's `{ sid, seq, type, at, raw }` projection.
 
 ### Code deviations from the brief's shown code
 
-- **`packages/extension/tsconfig.json` — dropped `extends`, inlined compilerOptions.**
+- **`packages/extension/tsconfig.json`: dropped `extends`, inlined compilerOptions.**
   The brief showed `{ "extends": "../../tsconfig.base.json", "include": ["ext", "test"] }`.
   With that form, `eve dev` bundling of the extension's authored hook failed at runtime:
   `/eve/v1/info` returned HTTP 500 with
@@ -49,7 +49,7 @@ from this file plus script outputs.
   drop `extends`, which also makes the package self-contained (a published extension
   cannot `extends` a monorepo-root file that won't exist downstream). After the fix,
   `/info` returned 200 and the hook appeared. `eve build` and `tsc -p tsconfig.json`
-  (exit 0) both still pass — different code path from the dev bundler.
+  (exit 0) both still pass, using a different code path from the dev bundler.
 - All other shown code (package.json, extension.ts, studio-forward.ts, mount re-export)
   matched eve 0.22.4 verbatim; no other adaptation needed.
 
@@ -69,11 +69,11 @@ hook `studio-test`):
 }
 ```
 
-- Observed slug: **`studio__studio-forward`** — exactly as predicted (`<mount>__<hook>`,
+- Observed slug: **`studio__studio-forward`**, exactly as predicted (`<mount>__<hook>`,
   mount file `studio.ts` + hook file `studio-forward.ts`). As planned.
 - `sourceId` `ext:studio:hooks/studio-forward.ts` confirms it arrived via the extension
   package through the `studio` mount namespace (not as a local agent hook).
-- `eventNames: []` — the wildcard `"*"` subscriber does not enumerate individual event
+- `eventNames: []`: the wildcard `"*"` subscriber does not enumerate individual event
   names in `/info`; discovery of the hook itself is nonetheless proven.
 
 Sanity check (one cheap OpenRouter call): POST `/eve/v1/session` with a PONG prompt
@@ -87,19 +87,19 @@ Note: the events delivered to the hook in the dev path carry `data`+`type` but n
 
 **HANDOFF TO TASK 3 (timestamp gap):** `JSON.stringify` drops `undefined` keys, so the
 emitted NDJSON lines currently have shape `{sid, seq, type, raw}` with **no timestamp
-field at all** — neither a top-level `at` nor anything inside `raw` (`{data, type}`).
+field at all**: neither a top-level `at` nor anything inside `raw` (`{data, type}`).
 The dist read showed `HandleMessageStreamEventMeta { at: string }` is stamped on the
 *persisted* event, but the object handed to the `"*"` hook at `event.meta` does not
 expose it in this dev runtime. The brief's interface lists `at` in the shape, so this is
 currently unfulfillable. Task 3 MUST determine whether the timestamp is reachable via a
 different path (a sibling handler arg, `ctx`, or different nesting in `event`) or is
-genuinely absent for wildcard hooks in this runtime — otherwise every captured event is
+genuinely absent for wildcard hooks in this runtime. Otherwise every captured event is
 timestamp-less. Not a Task 2 blocker: discovery + firing are the Task 2 deliverable and
 both are proven.
 
 ## Task 3: extension hook parity with the durable stream (M0-a, M0-c)
 
-### Findings JSON (verbatim script output — exit 0)
+### Findings JSON (verbatim script output, exit 0)
 
 ```json
 {
@@ -120,28 +120,28 @@ after (`lsof -ti tcp:43117 -sTCP:LISTEN` → empty).
   `session.started, turn.started, message.received, step.started, message.appended,
   message.completed, step.completed, turn.completed, session.waiting`.
 - **seq ↔ startIndex alignment: PASS.** The hook's per-session `seq` (0..8) equals the
-  stream replay position `i` for every event — the wildcard hook is dispatched in the
+  stream replay position `i` for every event: the wildcard hook is dispatched in the
   same order the durable stream materializes, with no gaps or reordering.
-- **M0-c (wire events carry a stable per-event ULID id): the answer is NO —
-  `eventIdField: null`, and this is a real finding, not a regex miss.** Confirmed by
+- **M0-c (wire events carry a stable per-event ULID id): the answer is NO.**
+  `eventIdField: null`, and this is a real finding, not a regex miss. Confirmed by
   dumping and eyeballing full wire events (below, incl. inside `data`): no `evnt_` ULID
   and no per-event `id` appears anywhere on the stream event or the hook `raw`. The
   `evnt_` ULIDs exist only on the internal `.workflow-data/events/*.json` workflow-engine
-  records — a *different* event stream (see workflow-data section).
+  records, a *different* event stream (see workflow-data section).
   **What the wire DOES carry (looked inside `data`):** turn/step-level identifiers, not a
-  per-event id — `data.turnId` (`"turn_0"`), `data.sequence` (turn seq), `data.stepIndex`,
+  per-event id. `data.turnId` (`"turn_0"`), `data.sequence` (turn seq), `data.stepIndex`,
   and on `session.started` `data.runtime.agentId`. These identify the turn/step, not the
   individual event, so several events in one step share the same triple.
   **Plan B dedup-key impact:** there is no wire-level per-event ULID to dedup on, so a
   dedup key must be synthesized. Candidates (open question, not decided here):
-  - `sid + startIndex` — soundest for a *durable* key: `startIndex` is the server-side
+  - `sid + startIndex`: soundest for a *durable* key. `startIndex` is the server-side
     durable stream position (what the stream replays against).
-  - `sid + seq` — cheaper but the hook's `seq` is a client-side counter in the hook
+  - `sid + seq`: cheaper, but the hook's `seq` is a client-side counter in the hook
     process that resets on restart; not durable across a hook-process restart.
-  - `sid + meta.at` — only if the timestamp is made reachable at the hook (it is not
+  - `sid + meta.at`: only if the timestamp is made reachable at the hook (it is not
     today; see Observation 1).
 
-### Observation 1 — hook `raw` vs stream event JSON key-set diff (meta.at follow-up)
+### Observation 1: hook `raw` vs stream event JSON key-set diff (meta.at follow-up)
 
 Same event (`seq 0` / stream index 0, `session.started`), compared verbatim:
 
@@ -151,11 +151,11 @@ Same event (`seq 0` / stream index 0, `session.started`), compared verbatim:
 | **hook `raw` (probe)** | `data, type` | absent ❌ (no `meta`) | none |
 
 **The STREAM version carries `meta.at`; the hook version does not carry `meta` at all.**
-This resolves the Task 2 handoff question: `meta.at` (and only `meta.at` — still no id) is
+This resolves the Task 2 handoff question: `meta.at` (and only `meta.at`, still no id) is
 **stamped after the hook dispatch point**. The object handed to the `"*"` wildcard hook is
 the raw `{data, type}` event *before* the runtime attaches `meta`; the durable stream (and
 the persisted record) is the post-stamp view. So the probe's `at` is genuinely
-unreachable via `event.meta` for wildcard hooks in this runtime — it is not a nesting
+unreachable via `event.meta` for wildcard hooks in this runtime; it is not a nesting
 mistake. If Plan B needs a per-event timestamp at the hook, it must come from another
 source (hook-side `Date.now()`, or reconcile against the stream/`.workflow-data` by
 `sid+seq`), because the event as delivered to the hook has none.
@@ -163,14 +163,14 @@ source (hook-side `Date.now()`, or reconcile against the stream/`.workflow-data`
 Artifacts from this run (scratchpad, not committed): `stream-events.json`,
 `probe-events.json`, `workflow-data-delta.json`.
 
-### Observation 2 — .workflow-data real-time check
+### Observation 2: .workflow-data real-time check
 
 The verify script snapshots `apps/demo-agent/.workflow-data/events/` (file → mtimeMs)
 before the session and after, and dumps the delta (non-fatal, not a gate).
 
 - **(a) Did new event files for OUR session's wrun id appear?** Yes. 13 new files named
   `wrun_01KX5KXGJVSKZRCD1RDF3XXBYJ-evnt_<ULID>.json` appeared for our session
-  (plus a sibling set for a spawned child run `wrun_01KX5KXGM22ATDHY0X3HEE2YBS` — a
+  (plus a sibling set for a spawned child run `wrun_01KX5KXGM22ATDHY0X3HEE2YBS`, a
   child/subagent workflow within the same turn).
 - **(b) Real-time writes vs one post-hoc flush?** Real-time / incremental. Our session's
   file mtimes are staggered monotonically from `08:57:12.037Z` to `08:57:13.494Z`
@@ -189,7 +189,7 @@ before the session and after, and dumps the delta (non-fatal, not a gate).
     "createdAt": "2026-07-10T08:57:13.490Z"
   }
   ```
-  It carries an `evnt_` ULID (`eventId`) and a `createdAt` timestamp — but there is **no
+  It carries an `evnt_` ULID (`eventId`) and a `createdAt` timestamp, but there is **no
   `meta.at`** and no wire `type` (`session.started` etc.). This is the engine's internal
   step ledger, not the `/eve/v1/session/:id/stream` event stream. So the `evnt_` ULID the
   M0-c regex hunts for lives *here*, on a different stream, which is exactly why
@@ -213,10 +213,10 @@ non-fatal changes (none touch the gate logic; each earns its keep on a single pa
    the `pnpm` process; the `eve dev` grandchild frequently survives and holds port 43117.
    Added a guarded `lsof -ti tcp:43117 -sTCP:LISTEN | xargs kill` in `finally` (the task
    explicitly requires kill-by-port). Also added GATE-FAIL diagnostics that print the
-   probe/stream type lists and the distinct probe sids **only on failure** — expose the
-   diff, never weaken the assertion. (No gate fired this run, so diagnostics stayed quiet.)
+   probe/stream type lists and the distinct probe sids **only on failure**, exposing the
+   diff without ever weakening the assertion. (No gate fired this run, so diagnostics stayed quiet.)
 
-Timing note: the default 15 s wait was sufficient — the model was fast (turn completed
+Timing note: the default 15 s wait was sufficient. The model was fast (turn completed
 ~1.4 s after session start per mtimes) and the stream replay (9) matched the probe (9)
 exactly, so no wait bump was needed.
 
@@ -268,10 +268,10 @@ Non-gating awaited-flush mechanism probe (verbatim):
 ```
 
 `hookCapturedWireEvents = 10` this run. This counter is `probe.filter(e => e.type !==
-"__flush").length` — it excludes `__flush` but NOT `__waiting_flush`, so 10 = **9 real wire
+"__flush").length`: it excludes `__flush` but NOT `__waiting_flush`, so 10 = **9 real wire
 events (all the eval's OWN session) + 1 `__waiting_flush` marker line**. There is NO stale
 session's wire event in this count: the re-enqueued runs fail immediately on startup
-("Unhandled queue") and never emit to the hook — which is also why the collector received
+("Unhandled queue") and never emit to the hook, which is also why the collector received
 exactly one line, not two. The verify script **exits 1**: the terminal gate correctly
 refuses to pass without a real terminal event. This is a FINDING, surfaced honestly, not a
 bug to patch around.
@@ -283,7 +283,7 @@ bug to patch around.
   run → `finally { await p.close() }`). `evalHookFired: true`; the hook captured the full
   wire sequence with parity to the durable stream on disk.
 
-- **M0-d (terminal path): NOT EXERCISED — lifecycle finding, NOT a flush failure.**
+- **M0-d (terminal path): NOT EXERCISED. A lifecycle finding, NOT a flush failure.**
   `terminalEventSurvivedClose: false` / `terminalFlushLatencyMs: null` are **lifecycle
   facts**. A single-turn `eve eval` **parks the session at `session.waiting` and never
   emits any terminal event** (`session.completed` / `result.completed` / `session.failed`).
@@ -291,7 +291,7 @@ bug to patch around.
   1. The hook was never invoked for a terminal event (the per-event `appendFileSync` runs
      BEFORE the `TERMINAL` check; no terminal line was ever written → the branch never ran).
   2. The durable wire stream on disk (`.workflow-data/streams/chunks/strm_<ulid>_user/`,
-     base64-JSON `.bin` chunks — **manually decoded**) ends at `session.waiting`. Full
+     base64-JSON `.bin` chunks, **manually decoded**) ends at `session.waiting`. Full
      sequence: `session.started, turn.started, message.received, step.started,
      message.appended, message.completed, step.completed, turn.completed, session.waiting`.
      No terminal event present.
@@ -299,13 +299,13 @@ bug to patch around.
      `hook_created`, `step_completed`, …) — no wire terminal event there either.
 
 - **M0-d (mechanism): PROVEN on the eval path via `session.waiting`.**
-  Because no terminal event fires here, the only way to answer the *actual* M0-d question —
-  "does an awaited, bounded (≤500ms) hook flush complete before `p.close()`?" — is to probe
+  Because no terminal event fires here, the only way to answer the *actual* M0-d question,
+  "does an awaited, bounded (≤500ms) hook flush complete before `p.close()`?", is to probe
   the last event whose hook IS dispatched inline before close, which is `session.waiting`.
   Result: `waitingFlushSurvivedClose: true`, `waitingFlushLatencyMs: 8ms` (well under 500).
   The awaited POST reached the external collector on 43118 before the eval's `finally {
   await p.close() }`. Strong support that Studio's awaited-hook-flush design is viable on
-  the eval path. **Caveat:** NOT proof a hypothetical `session.completed` would survive —
+  the eval path. **Caveat:** NOT proof a hypothetical `session.completed` would survive;
   that event never dispatches on a single-turn eval (see open question).
 
 ### Deviations from the brief (reality forced these)
@@ -335,7 +335,7 @@ bug to patch around.
    (adding `session.waiting`/`turn.completed` to force a green gate is forbidden and was not
    done).
 
-Note: env is safe — `eve eval` (`eval.js`) calls `loadDevelopmentEnvironmentFiles(root)`
+Note: env is safe. `eve eval` (`eval.js`) calls `loadDevelopmentEnvironmentFiles(root)`
 first, which reads `.env.local` (so `OPENROUTER_API_KEY` is present); it only sets vars NOT
 already in `process.env`, so the verify script's spawn-provided `EVE_STUDIO_PROBE_FILE`
 survives. Confirmed no auth confound: the turn genuinely produced a model response.
@@ -343,7 +343,7 @@ survives. Confirmed no auth confound: the turn genuinely produced a model respon
 ### `.workflow-data` under `eve eval` (user-requested observation, non-gating)
 
 For the eval's OWN session id (raw before/after counts are polluted by stale re-enqueued
-runs — measured per-sid instead):
+runs, so it was measured per-sid instead):
 
 - **(a) NEW engine-event files appeared:** YES, in the project's own
   `apps/demo-agent/.workflow-data/` (no temp path). The eval's session produced **11
@@ -354,7 +354,7 @@ runs — measured per-sid instead):
 - **(b) Real-time (staggered mtimes).** Chunk mtimes / event `createdAt` span the ~1.3s
   turn (`newFileMtimeSpreadMs` ≈ 1384–1556ms; per-event `meta.at` `…31.218Z` → `…32.505Z`).
   Not flushed-at-close.
-- **(c) `message.appended` streaming delta EXISTS on disk** — in the DURABLE WIRE STREAM
+- **(c) `message.appended` streaming delta EXISTS on disk**, in the DURABLE WIRE STREAM
   (`.workflow-data/streams/chunks/*.bin`, **manually decoded** = base64 JSON of wire events
   incl. `message.appended`), NOT in `.workflow-data/events/` (which is step/engine-level:
   `run_created`, `step_started`, …). So "Studio watches `.workflow-data/`" CAN see streaming
@@ -362,7 +362,7 @@ runs — measured per-sid instead):
   log. Terminal wire events absent from BOTH on a single-turn eval.
 - **(d) Engine files vs hook wire events:** ~11 engine files in `events/` vs **9
   hook-captured wire events** for the eval's session; the 9 hook events match the 9 durable
-  stream chunks exactly (full parity → confirms M0-b). Different counts = different
+  stream chunks exactly (full parity, confirming M0-b). Different counts mean different
   granularity (engine steps/hooks vs wire protocol events).
 
 ### Additional surprise (eval-path, non-gating)
@@ -382,7 +382,7 @@ under `eve dev`.)
 `EveEvalTaskResult.status` admits `"completed"`, so *some* agent turns end the session
 rather than park it. This run observed **parking** (`session.waiting`); a session-ending
 turn might emit a real terminal event. **Terminal-event survival on session-ending turns
-remains untested** — not observed on this single-turn eval; engineering one solely to green
+remains untested.** It was not observed on this single-turn eval, and engineering one solely to green
 the gate edges toward gaming it, so it was not pursued.
 
 ## Task 6
@@ -412,7 +412,7 @@ The brief's shown script asserts `hasTerminal` against
 three events, so `hasTerminal` would always be false on this path — not a bug, a lifecycle
 fact already proven and cited when Task 6 promoted `session.waiting` into the forwarder's
 `FLUSH_EVENTS` set. `scripts/smoke-capture.mjs` therefore asserts `hasTurnBoundary` instead,
-over `["session.completed", "result.completed", "session.failed", "session.waiting"]` —
+over `["session.completed", "result.completed", "session.failed", "session.waiting"]`,
 identical to the forwarder's `FLUSH_EVENTS`. Everything else (contiguous seq check,
 leakedSoFar check, exit-code semantics, collector/eval spawn shape) is verbatim from the
 brief.
@@ -430,44 +430,44 @@ for both).
 
 - **5 POST batches, 9 total envelopes, one session.** Batch shape observed from the raw
   collector NDJSON (`{events: [...]}` per line, per Task 6's contract):
-  - batch 0: 3 events — `session.started, turn.started, message.received`
-  - batch 1: 1 event — `step.started`
-  - batch 2: 1 event — `message.appended`
-  - batch 3: 3 events — `message.completed, step.completed, turn.completed`
-  - batch 4: 1 event — `session.waiting` (the awaited bounded flush; matches Task 4's
-    `waitingFlushSurvivedClose: true` finding — the forwarder's batching timer got preempted
+  - batch 0: 3 events, `session.started, turn.started, message.received`
+  - batch 1: 1 event, `step.started`
+  - batch 2: 1 event, `message.appended`
+  - batch 3: 3 events, `message.completed, step.completed, turn.completed`
+  - batch 4: 1 event, `session.waiting` (the awaited bounded flush; matches Task 4's
+    `waitingFlushSurvivedClose: true` finding; the forwarder's batching timer got preempted
     by the flush exactly once, for exactly the flush-triggering event, rather than draining
     everything in one shot)
 - **`process.kind` observed as `"dev"`, not `"eval"`.** `studio-forward.ts`'s `detectKind()`
   inspects `process.argv` for the substring `"eval"`/`"dev"`/`"start"`. Because `eve eval`
   internally spins up `createDevelopmentServer(...)` (the same M0-b mechanism Task 4 already
   documented), the hook process's own argv reflects that inner dev-server invocation, not the
-  outer `eve eval` CLI command — so every envelope in this run carries `process.kind: "dev"`
+  outer `eve eval` CLI command. So every envelope in this run carries `process.kind: "dev"`
   even though the whole run is an eval. Not a smoke assertion (`process.kind` is not part of
-  any Task 7 gate) — recorded as a real finding for Plan B/C consumers that might branch on
+  any Task 7 gate); recorded as a real finding for Plan B/C consumers that might branch on
   `process.kind` to distinguish eval runs from dev-server runs; today they cannot.
 - **`seq` is contiguous 0..8 across all 5 batches**, i.e. `seq` is a single per-session
-  counter that survives across batch boundaries, not reset per POST — confirms the forwarder
+  counter that survives across batch boundaries, not reset per POST. This confirms the forwarder
   stamps `seq` before batching/queuing, matching Task 6's design.
 - **`leakedSoFar: false` this run is a trivial pass, not a strip verification.** The real
   `message.appended` event captured from eve 0.22.4 on this run carries only
-  `{messageDelta, sequence, stepIndex, turnId}` in `event.data` — `messageSoFar` is not
+  `{messageDelta, sequence, stepIndex, turnId}` in `event.data`; `messageSoFar` is not
   present on the wire at all for this eval (short "PONG" reply, likely under whatever
   chunking threshold would trigger a `messageSoFar` field, if eve even emits one on this
   code path). So the assertion passes because there was nothing to leak, not because
   `buildEnvelope`'s strip (`ext/lib/envelope.ts` lines 35-38) fired and removed anything.
-  The strip logic itself IS verified — at the unit level, in
+  The strip logic itself IS verified, at the unit level, in
   `packages/extension/test/envelope.test.ts` ("strips messageSoFar from message.appended"),
   which synthesizes a `messageSoFar` field and confirms `buildEnvelope` removes it. This
   smoke does not add end-to-end proof that a real `messageSoFar`-bearing wire event gets
   stripped before reaching the collector; it only proves no such field leaks when eve
-  doesn't produce one. Not a smoke failure — the assertion is correct and verbatim from the
-  brief — just a scope note on what this particular run's green checkmark does and doesn't
+  doesn't produce one. Not a smoke failure: the assertion is correct and verbatim from the
+  brief, just a scope note on what this particular run's green checkmark does and doesn't
   demonstrate.
 - Startup noise (not a finding, same phenomenon Tasks 3/4 already noted): `eve eval` logs
   `Re-enqueued N active run(s) on startup` plus repeated `Queue message failed ... Unhandled
   queue` for stale parked runs from prior M0 sessions in the shared local
-  `apps/demo-agent/.workflow-data/` queue. Harmless — the eval's own session
+  `apps/demo-agent/.workflow-data/` queue. Harmless: the eval's own session
   (`wrun_01KX5Q8VNX5ZFVSD829NTBM9S4`) ran and completed (parked) cleanly with full 9-event
   parity, matching every prior task's observation of this queue.
 - **Re-run fragility (for `pnpm smoke:capture` as a recurring command).** This run's
@@ -481,7 +481,7 @@ for both).
 
 ## Plan B
 
-### Task 2: Free deterministic evals — mockModel fixture, terminal-lifecycle probe, committed envelope fixture
+### Task 2: Free deterministic evals, covering the mockModel fixture, terminal-lifecycle probe, and committed envelope fixture
 
 Run date: 2026-07-10. `apps/demo-agent/agent/agent.ts` gained the `EVE_STUDIO_MOCK=1`
 branch (verbatim from the brief); `apps/demo-agent/evals/mock-probe.eval.ts` sends two
@@ -496,14 +496,14 @@ Result: **exit 0**, `✓ mock-probe`, "Results: 1 passed (1 total)". No OpenRout
 possible (key absent from env; `mockModel` never makes an HTTP call). Collector
 (`M0_COLLECTOR_FILE=/tmp/eve-studio-planb-capture.ndjson node scripts/m0/collector.mjs`,
 port 43118) received **6 POST batch lines** (`wc -l` on the raw NDJSON = 6), flattening to
-**17 envelopes total for a single session** (`wrun_01KX5Z8EX40R4X8BMR4Z26X5Q9`) — same
+**17 envelopes total for a single session** (`wrun_01KX5Z8EX40R4X8BMR4Z26X5Q9`), the same
 batching pattern Task 7 documented (multiple small POSTs per turn, `seq` contiguous across
 batch boundaries). Port 43118 verified free after kill
 (`lsof -ti tcp:43118 -sTCP:LISTEN` → empty).
 
 #### Fixture
 
-`packages/studio/test/fixtures/mock-eval-envelopes.ndjson` — 17 lines, one flattened
+`packages/studio/test/fixtures/mock-eval-envelopes.ndjson`: 17 lines, one flattened
 Envelope-v1 JSON object per line, single session. Sanity checks (hand-verified):
 
 - `v === 1` on all 17 lines.
@@ -515,12 +515,12 @@ Envelope-v1 JSON object per line, single session. Sanity checks (hand-verified):
   step.started, message.appended, message.completed, step.completed, turn.completed,
   session.waiting` (turn 1) then `turn.started, message.received, step.started,
   message.appended, message.completed, step.completed, turn.completed, session.waiting`
-  (turn 2) — 2× `step.completed`, 2× `session.waiting`, 0 `session.started`-after-turn-1
+  (turn 2): 2× `step.completed`, 2× `session.waiting`, 0 `session.started`-after-turn-1
   (single session reused for both turns, as expected for `t.send()` called twice on the
   same eval context).
 - `messageSoFar` occurrences in the fixture: **0** (grep across the full flattened file).
 - No secrets: `project.root` is a base64url hash of `process.cwd()` (`"L1VzZXJzL2No"` for
-  this run — a truncated, non-reversible-to-full-path 12-char slice per
+  this run, a truncated, non-reversible-to-full-path 12-char slice per
   `ext/hooks/studio-forward.ts`'s `safeRootHash()`), not a raw filesystem path. Grepped for
   `sk-`, `api[_-]?key`, `bearer`, `secret`, `password`, `OPENROUTER` — none found.
 
@@ -553,7 +553,7 @@ Verbatim `step.completed` envelope (turn 1, `seq: 6`):
 
 **Confirmed path: `event.data.usage`** on `step.completed`, containing
 `{inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens}`. **No `costUsd` field is
-present** — this matches the installed `MockModelUsage` type
+present**, which matches the installed `MockModelUsage` type
 (`apps/demo-agent/node_modules/eve/dist/src/evals/mock-model.d.ts`), which declares only
 `inputTokens?: number` and `outputTokens?: number`; `cacheReadTokens`/`cacheWriteTokens`
 are additive fields eve itself stamps (defaulted to `0` for the mock path), not part of
@@ -582,7 +582,7 @@ Verbatim `session.started` envelope (`seq: 0`):
 }
 ```
 
-**Confirmed path: `event.data.runtime.eveVersion`** (string, e.g. `"0.22.4"`) — matches the
+**Confirmed path: `event.data.runtime.eveVersion`** (string, e.g. `"0.22.4"`), matching the
 design's predicted `eveVersion` field, nested one level deeper than `event.data.eveVersion`
 (it lives under `runtime`, alongside `agentId`/`agentName`/`modelId`). Task 3's
 `SessionSummary.eveVersion` reader must read `event.data.runtime.eveVersion` from the
@@ -591,7 +591,7 @@ session's `session.started` line, not `event.data.eveVersion`.
 #### Terminal-lifecycle probe (Step 6, carry-forward 3)
 
 1. `grep -n -iE "end|close|complete|finish|stop" apps/demo-agent/node_modules/eve/dist/src/evals/types.d.ts`
-   — no session-ending method exists on `EveEvalContext`, `EveEvalSession`, or
+   found no session-ending method on `EveEvalContext`, `EveEvalSession`, or
    `EveEvalTurn`. The only lifecycle surface is the read-only
    `status: "completed" | "failed" | "waiting"` field on `EveEvalTurn`/execution facts;
    there is no `.close()`, `.end()`, or `.terminate()` to invoke from an eval body.
@@ -605,14 +605,14 @@ session's `session.started` line, not `event.data.eveVersion`.
    `apps/demo-agent/evals/terminal-probe.eval.ts` (`t.send("trigger failure")`, no
    assertions). Result: eval harness still reports **exit 0 / "✓ terminal-probe" / 1 passed**
    (eve's harness treats a parked/errored turn as a pass unless an assertion explicitly
-   checks turn status) — but the wire capture (7 envelopes, one session
+   checks turn status), but the wire capture (7 envelopes, one session
    `wrun_01KX5ZB772CGE00SXN4T40THQK`) shows:
    `session.started, turn.started, message.received, step.started, step.failed, turn.failed,
    session.waiting`. Verbatim `step.failed`/`turn.failed` `event.data`:
    `{"code":"MODEL_CALL_FAILED","details":{"errorId":"...","message":"Error: probe: forced
    mock failure",...},"message":"probe: forced mock failure","sequence":0,"stepIndex":0,
    "turnId":"turn_0"}` (step.failed adds `stepIndex`; turn.failed omits it). Confirmed via
-   the harness log line `"model call failed — parking session for retry by the user"` —
+   the harness log line `"model call failed — parking session for retry by the user"`,
    the runtime treats a thrown mock responder as a **retryable parked failure**, not a
    session-terminal failure: the wire sequence still ends on `session.waiting`, never
    `session.failed`.
@@ -620,11 +620,11 @@ session's `session.started` line, not `event.data.eveVersion`.
      / deleted after this one probe run; `agent.ts` as committed contains only the Step 1
      code (no throw branch), and no probe eval ships.
 
-**Outcome: NOT PRODUCIBLE.** True-terminal flush survival remains untested — no
+**Outcome: NOT PRODUCIBLE.** True-terminal flush survival remains untested: no
 session-ending path found under eve eval 0.22.4 mock runs. Both routes available
 (exhausting the API for a session-ending method; forcing a turn failure) were tried and
 neither reaches `session.completed` / `result.completed` / `session.failed` on the wire;
-every observed lifecycle — success or thrown-responder failure alike — terminates in
+every observed lifecycle, success or thrown-responder failure alike, terminates in
 `session.waiting`. Carry-forward 3 stays OPEN, not silently dropped. The missing
 "true-terminal untested" bullet is added to §Task 7 below (carry-forward 6c).
 
@@ -643,12 +643,12 @@ path (`/private/tmp/claude-501/-Users-chris-dev-oss-eve-studio/363c5e40-.../scra
 dead outside the session that created it). Replaced with
 `process.env.M0_SCRATCH_DIR ?? "/tmp/eve-studio-m0"`, plus `mkdirSync(DUMP_DIR, { recursive:
 true })` so the directory is created if missing (the old path relied on the scratchpad
-already existing). Verified with `node --check scripts/m0/verify-live.mjs` (exit 0) only —
-per the brief, the paid verify script itself was NOT re-run; these scripts are archival
+already existing). Verified with `node --check scripts/m0/verify-live.mjs` (exit 0) only.
+Per the brief, the paid verify script itself was NOT re-run; these scripts are archival
 evidence generators, not regression tests.
 
 Port-cleanup note: the existing `lsof -ti tcp:${PORT} -sTCP:LISTEN | xargs kill` pattern in
-`verify-live.mjs` (and used throughout Task 2's manual collector kills) is macOS-shaped —
+`verify-live.mjs` (and used throughout Task 2's manual collector kills) is macOS-shaped.
 `xargs -r` (skip invocation when stdin is empty) is a GNU coreutils flag not available in
 macOS's BSD `xargs`, so these snippets rely on empty-stdin `xargs kill` being a harmless
 no-op (true on macOS; NOT guaranteed portable). If these scripts ever move to Linux CI,

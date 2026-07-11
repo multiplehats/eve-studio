@@ -5,7 +5,7 @@
 // `session.waiting` and NEVER emits `session.completed`/`result.completed`/`session.failed`
 // (scripts/m0/DEVIATIONS.md, "Task 4"). The brief's `hasTerminal` assertion would therefore
 // always fail on this path. Replaced with a turn-boundary assertion that includes
-// `session.waiting` alongside the three true terminals — matching the forwarder's
+// `session.waiting` alongside the three true terminals, matching the forwarder's
 // FLUSH_EVENTS set (Task 6).
 import { spawn } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";

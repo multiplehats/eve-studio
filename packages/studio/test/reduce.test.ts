@@ -36,7 +36,7 @@ describe("server-side reduction", () => {
     const r = createRegistry({ now: () => clock });
     const late = FIXTURE.slice(5);                         // positions 0-4 never arrive (Studio attached late)
     r.ingest(late[0]);
-    expect(r.getSession(late[0].sessionId)!.reducedUpTo).toBe(0);   // stalled — prefix missing
+    expect(r.getSession(late[0].sessionId)!.reducedUpTo).toBe(0);   // stalled: prefix missing
     clock += 3_001;                                        // dwell (rebaseAfterMs default 3000) elapses
     for (const e of late.slice(1)) r.ingest(e);
     const rec = r.getSession(late[0].sessionId)!;
@@ -45,7 +45,7 @@ describe("server-side reduction", () => {
     expect(rec.reducerError).toBeUndefined();
   });
 
-  it("cap pressure forces an immediate rebase — the byte cap survives a missing prefix", () => {
+  it("cap pressure forces an immediate rebase: the byte cap survives a missing prefix", () => {
     const r = createRegistry({ maxSessionBytes: 2_000 });
     const big = "x".repeat(500);
     for (let i = 5; i < 15; i++) {
@@ -65,7 +65,7 @@ describe("server-side reduction", () => {
   });
 
   it("never evicts unreduced events; evicted reduced events survive in reducedState", () => {
-    // Fixture totals 1,814 bytes of event JSON (DEVIATIONS §Plan B Task 5) — under 2,000,
+    // Fixture totals 1,814 bytes of event JSON (DEVIATIONS §Plan B Task 5), under 2,000,
     // so the cap is lowered to 1,000 here to force eviction on the real fixture session.
     const r = createRegistry({ maxSessionBytes: 1_000 });
     for (const e of FIXTURE) r.ingest(e);                  // small cap forces eviction on the real session

@@ -64,7 +64,7 @@ export class Forwarder {
     const timeoutMs = o.timeoutMs ?? this.#opts.flushTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Bound ourselves with a race — never trust fetchImpl to honor the abort
+      // Bound ourselves with a race: never trust fetchImpl to honor the abort
       // signal (and node's fetch can stall past it). The AbortSignal stays as a
       // best-effort connection cleanup.
       await Promise.race([

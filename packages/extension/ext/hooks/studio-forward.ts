@@ -20,7 +20,7 @@ const state: EnvelopeState = {
   // Plan A proved argv sniffing is doubly unreliable (reports "dev" under
   // `eve eval`; matches project paths containing "dev"). kind is now an
   // explicit, optional signal set by whoever launches eve (e.g. iterate-eve
-  // exports EVE_STUDIO_KIND=eval). Display-only — consumers never branch on it.
+  // exports EVE_STUDIO_KIND=eval). Display-only: consumers never branch on it.
   processInfo: { instanceId: randomUUID(), kind: process.env.EVE_STUDIO_KIND ?? "unknown", pid: process.pid },
   group: process.env.EVE_STUDIO_GROUP,
 };

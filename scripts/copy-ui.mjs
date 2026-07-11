@@ -6,7 +6,7 @@ const src = fileURLToPath(new URL("../packages/ui/dist/client", import.meta.url)
 const dest = fileURLToPath(new URL("../packages/studio/dist/ui", import.meta.url));
 
 if (!existsSync(`${src}/_shell.html`)) {
-  console.error("copy-ui: packages/ui/dist/client/_shell.html missing — run the UI build first");
+  console.error("copy-ui: packages/ui/dist/client/_shell.html missing. Run the UI build first.");
   process.exit(1);
 }
 rmSync(dest, { recursive: true, force: true });

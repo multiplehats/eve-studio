@@ -33,14 +33,14 @@ export function ReadOnlyComposer({ agent }: { agent?: string }) {
 
             <InputGroupAddon align="block-end" className="justify-between gap-2">
               <span className="text-muted-foreground px-1 text-xs">
-                View-only — Studio observes this session and can’t reply.
+                View-only: Studio observes this session and can’t reply.
               </span>
               <InputGroupButton
                 type="button"
                 variant="default"
                 size="icon-sm"
                 disabled
-                aria-label="Send (disabled — view-only)"
+                aria-label="Send (disabled, view-only)"
                 className="rounded-full"
               >
                 <HugeiconsIcon icon={ArrowUp02Icon} strokeWidth={2} aria-hidden="true" />

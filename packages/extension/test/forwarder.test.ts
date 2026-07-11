@@ -20,7 +20,7 @@ describe("Forwarder", () => {
   });
 
   it("flushTerminal resolves within the timeout even when fetch hangs and ignores abort", async () => {
-    // The mock deliberately ignores the AbortSignal — the implementation must
+    // The mock deliberately ignores the AbortSignal: the implementation must
     // bound itself (Promise.race), not trust fetch to honor the signal.
     const fetchMock = vi.fn().mockImplementation(() => new Promise(() => {}));
     const f = new Forwarder({ url: "http://127.0.0.1:43118", flushTimeoutMs: 100, fetchImpl: fetchMock });
@@ -61,7 +61,7 @@ describe("Forwarder", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("http://127.0.0.1:1/ingest");
     expect(calls[0].body).toEqual({ events: [{ a: 1 }, { a: 2 }] });
-    // Suppression cleared on success: prove it via the TIMER path — flushTerminal
+    // Suppression cleared on success: prove it via the TIMER path. flushTerminal
     // always forces, so a second flushTerminal could not distinguish suppressed
     // from clear. A batch-timer send is skipped while suppressed, so reaching
     // fetch here is the real assertion.
