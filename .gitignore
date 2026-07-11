@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
+dist/
+.eve/
+.workflow-data/
+.superpowers/
+docs/superpowers
+.claude
+.mcp.json

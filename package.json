@@ -1,0 +1,14 @@
+{
+  "name": "eve-studio-workspace",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "smoke:capture": "node scripts/smoke-capture.mjs",
+    "build:studio": "pnpm --filter @eve-studio/ui build && pnpm --filter eve-studio build && node scripts/copy-ui.mjs",
+    "smoke:studio": "pnpm build:studio && node scripts/smoke-studio.mjs"
+  }
+}
