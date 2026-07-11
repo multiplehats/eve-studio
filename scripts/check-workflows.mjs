@@ -41,14 +41,46 @@ function containsPullRequestTarget(value, seen = new WeakSet()) {
   );
 }
 
-function isAllowedPublishCommand(command) {
-  return new Set([
-    "cd release-artifacts && sha512sum --check SHA512SUMS",
-    "cd release-artifacts && sha256sum --check SHA256SUMS",
-    "sha512sum --check release-artifacts/SHA512SUMS",
-    "sha256sum --check release-artifacts/SHA256SUMS",
-  ]).has(command) ||
-    /^npm publish release-artifacts\/[A-Za-z0-9._@+-]+\.tgz --provenance(?: --access public)?$/.test(command);
+const checksumCommands = new Map([
+  ["cd release-artifacts && sha256sum -c SHA256SUMS", "256"],
+  ["cd release-artifacts && sha512sum -c SHA512SUMS", "512"],
+]);
+
+function checksumPublishLoop(algorithm) {
+  return `while IFS='  ' read -r checksum tarball; do
+  case "$tarball" in
+    ""|*/*|*\\\\*|*..*|*[!A-Za-z0-9._@+-]*)
+      exit 1
+      ;;
+  esac
+  case "$tarball" in
+    *.tgz)
+      npm publish "release-artifacts/$tarball" --provenance
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+done < release-artifacts/SHA${algorithm}SUMS`;
+}
+
+const checksumPublishLoops = new Map([
+  [checksumPublishLoop("256"), "256"],
+  [checksumPublishLoop("512"), "512"],
+]);
+
+function containsSelfHosted(value, seen = new WeakSet()) {
+  if (typeof value === "string") return value.toLowerCase().includes("self-hosted");
+  if (Array.isArray(value)) return value.some((item) => containsSelfHosted(item, seen));
+  if (!isMapping(value) || seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some((item) => containsSelfHosted(item, seen));
+}
+
+function isGitHubHostedRunner(value) {
+  const isLabel = (label) =>
+    typeof label === "string" && /^(?:ubuntu|windows|macos)(?:-[A-Za-z0-9.]+)*$/i.test(label);
+  return Array.isArray(value) ? value.length > 0 && value.every(isLabel) : isLabel(value);
 }
 
 function checkActionReference(file, actionReference) {
@@ -93,6 +125,16 @@ function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob) || !hasOidcWrite(publishJob)) return;
 
+  for (const field of ["container", "services", "runs-on"]) {
+    if (containsSelfHosted(publishJob[field])) {
+      fail(file, `OIDC publish job ${field} may not use self-hosted execution`);
+    }
+  }
+
+  if (!isGitHubHostedRunner(publishJob["runs-on"])) {
+    fail(file, "OIDC publish job runs-on must use only GitHub-hosted runner labels");
+  }
+
   if (Object.hasOwn(publishJob, "env")) {
     fail(file, "OIDC publish job may not define environment variables");
   }
@@ -106,6 +148,9 @@ function checkOidcPublishJob(file, workflow) {
     fail(file, "OIDC publish job steps must be a sequence");
     return;
   }
+
+  const verifiedAlgorithms = new Set();
+  const publishedAlgorithms = new Set();
 
   for (const step of publishJob.steps) {
     if (!isMapping(step)) {
@@ -134,14 +179,30 @@ function checkOidcPublishJob(file, workflow) {
         continue;
       }
 
-      const commands = step.run.split(/\r?\n/).map((command) => command.trim()).filter(Boolean);
-      if (commands.length === 0 || commands.some((command) => !isAllowedPublishCommand(command))) {
-        fail(file, "OIDC publish job may only verify checksums or publish a tarball with provenance");
+      const command = step.run.trim();
+      const checksumAlgorithm = checksumCommands.get(command);
+      const publishAlgorithm = checksumPublishLoops.get(command);
+      if (checksumAlgorithm) {
+        verifiedAlgorithms.add(checksumAlgorithm);
+      } else if (publishAlgorithm) {
+        publishedAlgorithms.add(publishAlgorithm);
+      } else {
+        fail(file, "OIDC publish job may only verify checksums or run the checksum-bound publish loop");
       }
     }
 
     if (!Object.hasOwn(step, "uses") && !Object.hasOwn(step, "run")) {
       fail(file, "OIDC publish job steps must use an approved action or command");
+    }
+  }
+
+  if (verifiedAlgorithms.size === 0) {
+    fail(file, "OIDC publish job must verify release-artifacts checksums before publishing");
+  }
+
+  for (const algorithm of publishedAlgorithms) {
+    if (!verifiedAlgorithms.has(algorithm)) {
+      fail(file, `OIDC publish loop must use the verified SHA${algorithm}SUMS manifest`);
     }
   }
 }
