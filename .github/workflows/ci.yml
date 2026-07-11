@@ -49,11 +49,11 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Typecheck
-        run: pnpm typecheck
-
       - name: Build release artifacts
         run: pnpm build:release
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Smoke Studio
         run: pnpm smoke:studio

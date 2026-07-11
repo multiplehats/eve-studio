@@ -141,11 +141,11 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Typecheck
-        run: pnpm typecheck
-
       - name: Build release artifacts
         run: pnpm build:release
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Pack and inspect release tarballs
         run: pnpm check:release-artifacts
