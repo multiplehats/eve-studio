@@ -28,10 +28,78 @@ function currentJobForLine(lines, index) {
   return job;
 }
 
+function hasOidcPublishJob(fileName, lines) {
+  return lines.some(
+    (line, index) =>
+      /id-token:\s*write/.test(line) && fileName === "release.yml" && currentJobForLine(lines, index) === "publish",
+  );
+}
+
+function isAllowedPublishCommand(command) {
+  return [
+    /^sha512sum --check(?: --strict)? [^;&|`$]+$/,
+    /^shasum -a 512 -c [^;&|`$]+$/,
+    /^npm publish (?:[^\s/]+\/)*[^\s/]+\.tgz --provenance(?: --access public)?$/,
+  ].some((pattern) => pattern.test(command));
+}
+
+function checkOidcPublishJob(file, lines) {
+  const fileName = basename(file);
+  if (!hasOidcPublishJob(fileName, lines)) return;
+
+  let runIndent = null;
+  const forbiddenPublishContent = /\b(?:checkout|pnpm\/action-setup|pnpm|npm install|npm ci|npm run|npm test|npm exec|yarn|bun|build|typecheck|smoke)\b/i;
+
+  lines.forEach((line, index) => {
+    if (currentJobForLine(lines, index) !== "publish") return;
+
+    const lineNumber = index + 1;
+    if (forbiddenPublishContent.test(line)) {
+      fail(file, lineNumber, "OIDC publish job must not install dependencies or run workspace code");
+    }
+
+    const uses = line.match(/uses:\s*([^#\s]+)/);
+    if (uses) {
+      const [actionPath] = uses[1].split("@");
+      if (actionPath !== "actions/setup-node" && actionPath !== "actions/download-artifact") {
+        fail(file, lineNumber, "OIDC publish job may only use setup-node and download-artifact actions");
+      }
+    }
+
+    const run = line.match(/^(\s*)run:\s*(.*)$/);
+    if (run) {
+      runIndent = run[1].length;
+      const command = run[2].trim();
+      if (command && command !== "|" && command !== ">") {
+        if (!isAllowedPublishCommand(command)) {
+          fail(file, lineNumber, "OIDC publish job may only verify checksums or publish a tarball with provenance");
+        }
+        runIndent = null;
+      }
+      return;
+    }
+
+    if (runIndent !== null) {
+      const indent = line.match(/^\s*/)[0].length;
+      if (!line.trim()) return;
+      if (indent <= runIndent) {
+        runIndent = null;
+        return;
+      }
+
+      if (!isAllowedPublishCommand(line.trim())) {
+        fail(file, lineNumber, "OIDC publish job may only verify checksums or publish a tarball with provenance");
+      }
+    }
+  });
+}
+
 function checkFile(file) {
   const text = readFileSync(file, "utf8");
   const lines = text.split(/\r?\n/);
   const fileName = basename(file);
+
+  checkOidcPublishJob(file, lines);
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -40,8 +108,12 @@ function checkFile(file) {
       fail(file, lineNumber, "`pull_request_target` is forbidden");
     }
 
-    if (/\b(NPM_TOKEN|NODE_AUTH_TOKEN|secrets\.[A-Za-z0-9_]*NPM[A-Za-z0-9_]*)\b/.test(line)) {
-      fail(file, lineNumber, "npm tokens/secrets are forbidden; use Trusted Publishing/OIDC");
+    if (/\bsecrets\./.test(line)) {
+      fail(file, lineNumber, "repository secrets are forbidden; use github.token and Trusted Publishing/OIDC");
+    }
+
+    if (/^\s*cache\s*:/.test(line)) {
+      fail(file, lineNumber, "workflow dependency caching is forbidden");
     }
 
     if (/id-token:\s*write/.test(line)) {

@@ -1,6 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
 
 function run(args) {
   const result = spawnSync("git", args, { encoding: "utf8", stdio: "pipe" });
@@ -12,6 +11,9 @@ const diffBase = run(["merge-base", "HEAD", "origin/main"]) || "origin/main";
 const changed = run(["diff", "--name-only", `${diffBase}...HEAD`])
   .split("\n")
   .filter(Boolean);
+const changedChangesets = run(["diff", "--name-only", "--diff-filter=AM", `${diffBase}...HEAD`, "--", ".changeset"])
+  .split("\n")
+  .filter(Boolean);
 
 const uiChanged = changed.some((file) => file.startsWith("packages/ui/"));
 if (!uiChanged) {
@@ -19,13 +21,12 @@ if (!uiChanged) {
   process.exit(0);
 }
 
-const changesetDir = ".changeset";
-const changesets = existsSync(changesetDir)
-  ? readdirSync(changesetDir).filter((file) => file.endsWith(".md") && file !== "README.md")
-  : [];
+const changesets = changedChangesets.filter(
+  (file) => file.startsWith(".changeset/") && file.endsWith(".md") && file !== ".changeset/README.md",
+);
 
 const hasStudioChangeset = changesets.some((file) => {
-  const text = readFileSync(join(changesetDir, file), "utf8");
+  const text = readFileSync(file, "utf8");
   return text.includes('"eve-studio"') || text.includes("'eve-studio'");
 });
 
