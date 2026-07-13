@@ -92,7 +92,7 @@ describe("TranscriptViewport", () => {
 
     expect(scrollTo).toHaveBeenCalledWith({
       top: 1_200,
-      behavior: "smooth",
+      behavior: "auto",
     })
   })
 
@@ -121,6 +121,6 @@ describe("TranscriptViewport", () => {
     )
 
     expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull()
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1_000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1_000, behavior: "auto" })
   })
 })
