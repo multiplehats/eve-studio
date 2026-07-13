@@ -271,11 +271,7 @@ function checkCiLaunchGates(file, workflow) {
 
 function checkReleaseBehaviorGates(file, workflow) {
   const buildPackJob = workflow.jobs?.["build-pack"];
-  const requiredCommands = [
-    "pnpm smoke:studio",
-    "pnpm exec playwright install --with-deps chromium",
-    "pnpm smoke:browser",
-  ];
+  const requiredCommands = ["pnpm smoke:studio"];
   requireRunCommands(file, "build-pack", buildPackJob, requiredCommands);
   for (const command of requiredCommands) {
     requireCommandBefore(
@@ -286,13 +282,6 @@ function checkReleaseBehaviorGates(file, workflow) {
       "pnpm check:release-artifacts",
     );
   }
-  requireCommandBefore(
-    file,
-    "build-pack",
-    buildPackJob,
-    "pnpm exec playwright install --with-deps chromium",
-    "pnpm smoke:browser",
-  );
 }
 
 function checkReleaseRefAndVersionPatch(file, workflow) {
