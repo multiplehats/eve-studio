@@ -4,6 +4,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router"
+import { Analytics } from "@vercel/analytics/react"
 
 import appCss from "../styles.css?url"
 
@@ -62,6 +63,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="font-sans antialiased">
         {children}
+        <Analytics />
         <Scripts />
       </body>
     </html>
