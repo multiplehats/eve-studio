@@ -1,15 +1,20 @@
+import { Buffer } from "node:buffer";
+
 export interface ForwarderOptions {
   url: string;
   batchDelayMs?: number;
   flushTimeoutMs?: number;
   backoffMs?: number;
   maxQueue?: number;
+  maxBatchBytes?: number;
+  maxBatchEvents?: number;
   fetchImpl?: typeof fetch;
 }
 
 interface QueueEntry {
   id: number;
-  event: unknown;
+  serialized: string;
+  byteLength: number;
 }
 
 interface DrainOptions {
@@ -19,6 +24,11 @@ interface DrainOptions {
 }
 
 type DrainResult = "success" | "failed" | "deferred";
+
+const BATCH_PREFIX = '{"events":[';
+const BATCH_SUFFIX = "]}";
+const BATCH_OVERHEAD_BYTES = Buffer.byteLength(BATCH_PREFIX) + Buffer.byteLength(BATCH_SUFFIX);
+const MAX_COLLECTOR_BODY_BYTES = 32 * 1024 * 1024;
 
 export class Forwarder {
   #queue: QueueEntry[] = [];
@@ -31,6 +41,12 @@ export class Forwarder {
   readonly #opts: Required<ForwarderOptions>;
 
   constructor(opts: ForwarderOptions) {
+    const maxBatchBytes = Number.isSafeInteger(opts.maxBatchBytes) && opts.maxBatchBytes! > BATCH_OVERHEAD_BYTES
+      ? Math.min(opts.maxBatchBytes!, MAX_COLLECTOR_BODY_BYTES)
+      : MAX_COLLECTOR_BODY_BYTES;
+    const maxBatchEvents = Number.isSafeInteger(opts.maxBatchEvents) && opts.maxBatchEvents! > 0
+      ? opts.maxBatchEvents!
+      : 250;
     this.#opts = {
       batchDelayMs: 25,
       flushTimeoutMs: 500,
@@ -38,6 +54,8 @@ export class Forwarder {
       maxQueue: 5_000,
       fetchImpl: fetch,
       ...opts,
+      maxBatchBytes,
+      maxBatchEvents,
     };
   }
 
@@ -48,7 +66,11 @@ export class Forwarder {
   /** Synchronous, never throws. Steady-state entry point. */
   push(envelope: unknown): void {
     try {
-      this.#queue.push({ id: this.#nextId++, event: envelope });
+      const serialized = JSON.stringify(envelope);
+      if (serialized === undefined) return;
+      const byteLength = Buffer.byteLength(serialized, "utf8");
+      if (BATCH_OVERHEAD_BYTES + byteLength > this.#opts.maxBatchBytes) return;
+      this.#queue.push({ id: this.#nextId++, serialized, byteLength });
       this.#trimQueue();
       this.#schedule(this.#opts.batchDelayMs);
     } catch {
@@ -67,11 +89,12 @@ export class Forwarder {
 
       while (this.#hasPendingThrough(throughId)) {
         if (this.#drainPromise) {
-          if ((await this.#waitUntil(this.#drainPromise, deadline)) === undefined) return;
+          const result = await this.#waitUntil(this.#drainPromise, deadline);
+          if (result === undefined || result === "failed") return;
           continue;
         }
 
-        if (Date.now() >= deadline || forcedAttempted) return;
+        if (Date.now() >= deadline || Date.now() < this.#suppressedUntil || forcedAttempted) return;
         forcedAttempted = true;
         this.#clearTimer();
         const drain = this.#startDrain({ force: true, deadline, throughId });
@@ -160,15 +183,22 @@ export class Forwarder {
     return await this.#opts.fetchImpl(`${this.#opts.url}/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events: batch.map(({ event }) => event) }),
+      body: `${BATCH_PREFIX}${batch.map(({ serialized }) => serialized).join(",")}${BATCH_SUFFIX}`,
       signal: AbortSignal.timeout(timeoutMs),
     });
   }
 
   #takeBatch(throughId: number | undefined): QueueEntry[] {
-    if (throughId === undefined) return this.#queue.splice(0);
     let count = 0;
-    while (count < this.#queue.length && this.#queue[count].id <= throughId) count += 1;
+    let byteLength = BATCH_OVERHEAD_BYTES;
+    while (count < this.#queue.length && count < this.#opts.maxBatchEvents) {
+      const entry = this.#queue[count];
+      if (throughId !== undefined && entry.id > throughId) break;
+      const nextByteLength = byteLength + entry.byteLength + (count === 0 ? 0 : 1);
+      if (nextByteLength > this.#opts.maxBatchBytes) break;
+      byteLength = nextByteLength;
+      count += 1;
+    }
     return this.#queue.splice(0, count);
   }
 

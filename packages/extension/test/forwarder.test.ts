@@ -66,11 +66,95 @@ describe("Forwarder", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("shares one failed attempt across concurrent terminal waiters", async () => {
+    vi.useRealTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      batchDelayMs: 1_000,
+      flushTimeoutMs: 50,
+      backoffMs: 1_000,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0 });
+    await Promise.all(Array.from({ length: 20 }, () => f.flushTerminal()));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(f.queueLength).toBe(1);
+  });
+
+  it("respects failure backoff across sequential terminal flushes", async () => {
+    vi.useRealTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      flushTimeoutMs: 25,
+      backoffMs: 1_000,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0 });
+    await f.flushTerminal();
+    f.push({ seq: 1 });
+    await f.flushTerminal();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(f.queueLength).toBe(2);
+  });
+
   it("caps the queue instead of growing unboundedly while collector is down", () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
     const f = new Forwarder({ url: "http://127.0.0.1:43118", maxQueue: 100, fetchImpl: fetchMock });
     for (let i = 0; i < 500; i++) f.push({ seq: i });
     expect(f.queueLength).toBeLessThanOrEqual(100);
+  });
+
+  it("splits a recovered backlog below the collector body limit", async () => {
+    const bodyLimit = 180;
+    const fetchMock = vi.fn().mockImplementation((_url, init?: RequestInit) => {
+      const body = String(init?.body);
+      return Promise.resolve(
+        new Response(null, { status: Buffer.byteLength(body, "utf8") <= bodyLimit ? 204 : 413 }),
+      );
+    });
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      batchDelayMs: 5,
+      maxBatchBytes: bodyLimit,
+      maxBatchEvents: 2,
+      fetchImpl: fetchMock,
+    });
+
+    for (let seq = 0; seq < 5; seq += 1) f.push({ seq, payload: "x".repeat(30) });
+    await vi.advanceTimersByTimeAsync(5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(flushedBodies(fetchMock).flatMap(({ events }) => events.map(({ seq }: { seq: number }) => seq))).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(Buffer.byteLength(String((init as RequestInit).body), "utf8")).toBeLessThanOrEqual(bodyLimit);
+    }
+    expect(f.queueLength).toBe(0);
+  });
+
+  it("drops one over-limit envelope without blocking newer events", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      batchDelayMs: 5,
+      maxBatchBytes: 100,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0, payload: "x".repeat(1_000) });
+    f.push({ seq: 1 });
+    await vi.advanceTimersByTimeAsync(5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(flushedBodies(fetchMock)[0]).toEqual({ events: [{ seq: 1 }] });
+    expect(f.queueLength).toBe(0);
   });
 
   it("flushTerminal success path: drains queue, posts one batch, clears suppression", async () => {
@@ -196,6 +280,8 @@ describe("Forwarder", () => {
     expect(f.queueLength).toBe(2);
 
     await f.flushTerminal();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(flushedBodies(fetchMock)).toEqual([
       { events: [{ seq: 0 }, { seq: 1 }] },
@@ -229,6 +315,8 @@ describe("Forwarder", () => {
 
     expect(f.queueLength).toBe(3);
     await f.flushTerminal();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(flushedBodies(fetchMock)[1]).toEqual({ events: [{ seq: 2 }, { seq: 3 }, { seq: 4 }] });
   });
 
