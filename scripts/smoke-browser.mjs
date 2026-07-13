@@ -61,6 +61,8 @@ try {
   const context = await browser.newContext();
   const page = await context.newPage();
   const browserFailures = [];
+  const studioOrigin = new URL(studio.url).origin;
+  let navigationMayAbortRequests = false;
 
   page.on("pageerror", (error) =>
     browserFailures.push(`pageerror: ${error.message}`),
@@ -77,6 +79,24 @@ try {
     ) {
       browserFailures.push(
         `${response.status()} ${response.request().resourceType()}: ${response.url()}`,
+      );
+    }
+  });
+  page.on("requestfailed", (request) => {
+    const failure = request.failure()?.errorText ?? "unknown network failure";
+    let sameOrigin = false;
+    try {
+      sameOrigin = new URL(request.url()).origin === studioOrigin;
+    } catch {
+      /* malformed request URLs are not Studio resources */
+    }
+    if (
+      sameOrigin &&
+      CRITICAL_RESOURCE_TYPES.has(request.resourceType()) &&
+      !(navigationMayAbortRequests && failure === "net::ERR_ABORTED")
+    ) {
+      browserFailures.push(
+        `requestfailed ${request.resourceType()}: ${request.url()} (${failure})`,
       );
     }
   });
@@ -108,7 +128,9 @@ try {
   await page.goto(directUrl, { waitUntil: "domcontentloaded" });
   await assertSessionLoaded("cold navigation");
 
+  navigationMayAbortRequests = true;
   await page.reload({ waitUntil: "domcontentloaded" });
+  navigationMayAbortRequests = false;
   await assertSessionLoaded("reload");
 
   if (browserFailures.length > 0) {
