@@ -18,13 +18,16 @@ interface DrainOptions {
   throughId?: number;
 }
 
+type DrainResult = "success" | "failed" | "deferred";
+
 export class Forwarder {
   #queue: QueueEntry[] = [];
   #activeBatch: QueueEntry[] = [];
   #nextId = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
-  #drainPromise: Promise<void> | undefined;
+  #drainPromise: Promise<DrainResult> | undefined;
   #suppressedUntil = 0;
+  #terminalWaiters = 0;
   readonly #opts: Required<ForwarderOptions>;
 
   constructor(opts: ForwarderOptions) {
@@ -55,33 +58,41 @@ export class Forwarder {
 
   /** Awaited only on terminal events. Bounded by one flushTimeoutMs deadline. */
   async flushTerminal(): Promise<void> {
+    this.#terminalWaiters += 1;
     try {
       this.#clearTimer();
       const throughId = this.#nextId - 1;
       const deadline = Date.now() + this.#opts.flushTimeoutMs;
+      let forcedAttempted = false;
 
       while (this.#hasPendingThrough(throughId)) {
         if (this.#drainPromise) {
-          if (!(await this.#waitUntil(this.#drainPromise, deadline))) return;
+          if ((await this.#waitUntil(this.#drainPromise, deadline)) === undefined) return;
           continue;
         }
 
-        if (Date.now() >= deadline) return;
+        if (Date.now() >= deadline || forcedAttempted) return;
+        forcedAttempted = true;
         this.#clearTimer();
         const drain = this.#startDrain({ force: true, deadline, throughId });
-        if (!(await this.#waitUntil(drain, deadline))) return;
+        const result = await this.#waitUntil(drain, deadline);
+        if (result === undefined || result === "failed") return;
       }
     } catch {
       /* bounded, silent */
+    } finally {
+      this.#terminalWaiters = Math.max(0, this.#terminalWaiters - 1);
+      this.#schedule(this.#opts.batchDelayMs);
     }
   }
 
   #schedule(delayMs: number): void {
-    if (this.#timer || this.#queue.length === 0) return;
+    if (this.#timer || this.#drainPromise || this.#terminalWaiters > 0 || this.#queue.length === 0) return;
+    const backoffRemaining = Math.max(0, this.#suppressedUntil - Date.now());
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       void this.#startDrain({ force: false });
-    }, Math.max(0, delayMs));
+    }, Math.max(0, delayMs, backoffRemaining));
     this.#timer.unref?.();
   }
 
@@ -91,32 +102,33 @@ export class Forwarder {
     this.#timer = undefined;
   }
 
-  #startDrain(options: DrainOptions): Promise<void> {
+  #startDrain(options: DrainOptions): Promise<DrainResult> {
     if (this.#drainPromise) return this.#drainPromise;
 
     const drain = Promise.resolve()
       .then(() => this.#drain(options))
-      .catch(() => {
+      .catch((): DrainResult => {
         /* internal work never rejects into hook callbacks */
+        return "failed";
       })
       .finally(() => {
         if (this.#drainPromise === drain) this.#drainPromise = undefined;
+        this.#schedule(this.#opts.batchDelayMs);
       });
     this.#drainPromise = drain;
     return drain;
   }
 
-  async #drain(options: DrainOptions): Promise<void> {
+  async #drain(options: DrainOptions): Promise<DrainResult> {
     while (this.#hasQueuedThrough(options.throughId)) {
       const now = Date.now();
       if (!options.force && now < this.#suppressedUntil) {
-        this.#schedule(this.#suppressedUntil - now);
-        return;
+        return "deferred";
       }
-      if (options.deadline !== undefined && now >= options.deadline) return;
+      if (options.deadline !== undefined && now >= options.deadline) return "deferred";
 
       const batch = this.#takeBatch(options.throughId);
-      if (batch.length === 0) return;
+      if (batch.length === 0) return "success";
       this.#activeBatch = batch;
 
       try {
@@ -134,32 +146,23 @@ export class Forwarder {
         this.#queue.unshift(...batch);
         this.#trimQueue();
         this.#suppressedUntil = Date.now() + this.#opts.backoffMs;
-        this.#schedule(this.#opts.backoffMs);
-        return;
+        return "failed";
       } finally {
         this.#activeBatch = [];
       }
+
+      if (!options.force && this.#terminalWaiters > 0) return "success";
     }
+    return "success";
   }
 
   async #boundedFetch(batch: QueueEntry[], timeoutMs: number): Promise<Response> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        this.#opts.fetchImpl(`${this.#opts.url}/ingest`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ events: batch.map(({ event }) => event) }),
-          signal: AbortSignal.timeout(timeoutMs),
-        }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("flush timeout")), timeoutMs);
-          timer.unref?.();
-        }),
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    return await this.#opts.fetchImpl(`${this.#opts.url}/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ events: batch.map(({ event }) => event) }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
   }
 
   #takeBatch(throughId: number | undefined): QueueEntry[] {
@@ -182,16 +185,16 @@ export class Forwarder {
     );
   }
 
-  async #waitUntil(promise: Promise<void>, deadline: number): Promise<boolean> {
+  async #waitUntil(promise: Promise<DrainResult>, deadline: number): Promise<DrainResult | undefined> {
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return false;
+    if (remaining <= 0) return undefined;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
-        promise.then(() => true),
-        new Promise<boolean>((resolve) => {
-          timer = setTimeout(() => resolve(false), remaining);
+        promise,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), remaining);
           timer.unref?.();
         }),
       ]);

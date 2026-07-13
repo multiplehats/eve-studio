@@ -30,8 +30,8 @@ describe("Forwarder", () => {
   });
 
   it("flushTerminal resolves within the timeout even when fetch hangs and ignores abort", async () => {
-    // The mock deliberately ignores the AbortSignal: the implementation must
-    // bound itself (Promise.race), not trust fetch to honor the signal.
+    // The terminal waiter owns its deadline even when the in-flight request
+    // deliberately ignores AbortSignal.
     const fetchMock = vi.fn().mockImplementation(() => new Promise(() => {}));
     const f = new Forwarder({ url: "http://127.0.0.1:43118", flushTimeoutMs: 100, fetchImpl: fetchMock });
     f.push({ seq: 0 });
@@ -47,6 +47,22 @@ describe("Forwarder", () => {
     await vi.advanceTimersByTimeAsync(10); // first send fires and fails -> backoff starts
     f.push({ seq: 1 });
     await vi.advanceTimersByTimeAsync(10); // within backoff window: send suppressed
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes only one forced attempt when a terminal flush fails immediately", async () => {
+    vi.useRealTimers();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      flushTimeoutMs: 25,
+      backoffMs: 1_000,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0 });
+    await f.flushTerminal();
+
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -140,6 +156,33 @@ describe("Forwarder", () => {
     expect(f.queueLength).toBe(0);
   });
 
+  it("reschedules an event pushed while a forced drain is active", async () => {
+    const first = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      batchDelayMs: 5,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0 });
+    const terminal = f.flushTerminal();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    f.push({ seq: 1 });
+    await vi.advanceTimersByTimeAsync(5);
+    first.resolve(new Response(null, { status: 204 }));
+    await terminal;
+    await vi.advanceTimersByTimeAsync(5);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(flushedBodies(fetchMock)[1]).toEqual({ events: [{ seq: 1 }] });
+  });
+
   it("treats a non-2xx collector response as a failed delivery and requeues the exact batch", async () => {
     const fetchMock = vi
       .fn()
@@ -189,7 +232,7 @@ describe("Forwarder", () => {
     expect(flushedBodies(fetchMock)[1]).toEqual({ events: [{ seq: 2 }, { seq: 3 }, { seq: 4 }] });
   });
 
-  it("uses one terminal deadline while joining and retrying a hanging active request", async () => {
+  it("uses one terminal deadline without overlapping a hanging active request", async () => {
     const fetchMock = vi.fn().mockImplementation(() => new Promise(() => {}));
     const f = new Forwarder({
       url: "http://127.0.0.1:43118",
@@ -211,6 +254,44 @@ describe("Forwarder", () => {
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await expect(pending).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a terminal waiter the remaining deadline after an active batch", async () => {
+    vi.useRealTimers();
+    const first = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce((_url: string | URL | Request, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) return;
+          if (signal.aborted) {
+            reject(signal.reason);
+            return;
+          }
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      });
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      batchDelayMs: 1,
+      flushTimeoutMs: 100,
+      fetchImpl: fetchMock,
+    });
+
+    f.push({ seq: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    f.push({ seq: 1 });
+    const terminal = f.flushTerminal();
+    setTimeout(() => first.resolve(new Response(null, { status: 204 })), 20);
+    await terminal;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(f.queueLength).toBe(1);
   });
 });
