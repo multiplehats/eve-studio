@@ -68,7 +68,7 @@ function checksumPublishLoop(algorithm) {
   esac
   case "$tarball" in
     *.tgz)
-      npm publish "release-artifacts/$tarball" --provenance --ignore-scripts
+      npm publish "./release-artifacts/$tarball" --provenance --ignore-scripts
       ;;
     *)
       exit 1
