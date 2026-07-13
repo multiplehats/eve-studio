@@ -1,6 +1,6 @@
 # Studio reliability design
 
-**Date:** 2026-07-13  
+**Date:** 2026-07-13
 **Status:** Approved for implementation under the maintainer's full-autonomy launch brief
 
 ## Goal
