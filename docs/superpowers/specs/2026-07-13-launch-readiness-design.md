@@ -14,7 +14,12 @@ Keep the public package names:
 - `eve-studio` — the unscoped executable, so `npx eve-studio` stays memorable;
 - `@eve-studio/extension` — the scoped Eve capture extension.
 
-npm organizations can manage access to an unscoped package, so renaming the CLI to `@eve-studio/cli` creates migration cost without solving the ownership issue. After merge, a logged-in npm owner should grant the `eve-studio` organization developer team read/write access to the unscoped package and verify collaborators for both packages. Publishing itself remains CI-only through Trusted Publishing.
+npm's current access matrix keeps unscoped packages under user accounts. That makes
+the split expected: moving the CLI itself under the organization would require a new
+name such as `@eve-studio/cli` and would lose the direct `npx eve-studio` command.
+Keep the memorable unscoped entry point, audit its named owners, and use the same
+repository-backed Trusted Publisher for both packages. Add another npm user as an
+owner only when a second human maintainer needs registry access.
 
 ## Package identity
 
@@ -68,10 +73,12 @@ Add a patch changeset for both published packages. It describes live-stream corr
 These require npm/GitHub account authority and are not performed by repository code:
 
 ```sh
-npm access grant read-write eve-studio:developers eve-studio
-npm access list collaborators eve-studio
+npm owner ls eve-studio
 npm access list collaborators @eve-studio/extension
 ```
+
+If another human maintainer needs access to the unscoped CLI, add that npm user
+directly with `npm owner add <npm-username> eve-studio`.
 
 Also verify npm Trusted Publishing points at the repository's `release.yml` workflow and add repository topics such as `eve`, `ai-agents`, `observability`, and `developer-tools` if they are still absent.
 

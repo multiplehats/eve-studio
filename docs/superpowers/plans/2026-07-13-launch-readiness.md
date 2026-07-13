@@ -140,9 +140,14 @@ git diff --check
 Provide the maintainer these post-merge commands; do not run them without active npm authentication and explicit external-state confirmation:
 
 ```sh
-npm access grant read-write eve-studio:developers eve-studio
-npm access list collaborators eve-studio
+npm owner ls eve-studio
 npm access list collaborators @eve-studio/extension
+```
+
+Add a second human maintainer to the unscoped CLI only when needed:
+
+```sh
+npm owner add <npm-username> eve-studio
 ```
 
 Also hand off Trusted Publishing and GitHub-topic checks. Do not publish, push, merge, or change repository settings as part of the local implementation.
