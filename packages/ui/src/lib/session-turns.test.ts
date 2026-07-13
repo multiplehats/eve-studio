@@ -3,14 +3,16 @@ import type { EveMessage, StoredEvent } from "eve-studio"
 import { formatDuration, groupTurns } from "./session-turns"
 
 // Raw events carry the wire timestamp on `event.meta.at`, which isn't in the
-// StoredEvent type — build loosely and cast.
+// StoredEvent type. Keeping the event in a variable preserves that wire field
+// without weakening the returned StoredEvent.
 function ev(type: string, turnId: string, at: string): StoredEvent {
+  const event = { type, data: { turnId }, meta: { at } }
   return {
     position: 0,
     source: "disk",
     receivedAt: 0,
-    event: { type, data: { turnId }, meta: { at } },
-  } as unknown as StoredEvent
+    event,
+  }
 }
 
 describe("groupTurns", () => {

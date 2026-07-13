@@ -12,7 +12,7 @@ import type { Turn } from "./session-turns"
 // drops the large I/O blobs. (One reading of Vercel's Detailed/Summarize
 // toggle; adjust if a different summary is meant.)
 
-const TOOL_STATE_LABEL: Record<string, string> = {
+const TOOL_STATE_LABEL: Partial<Record<string, string>> = {
   "input-streaming": "pending",
   "input-available": "pending",
   "approval-requested": "awaiting approval",
