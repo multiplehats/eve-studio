@@ -110,6 +110,22 @@ describe("Forwarder", () => {
     expect(f.queueLength).toBeLessThanOrEqual(100);
   });
 
+  it("caps total serialized queue bytes while preserving the newest events", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const f = new Forwarder({
+      url: "http://127.0.0.1:43118",
+      maxQueue: 100,
+      maxQueueBytes: 220,
+      fetchImpl: fetchMock,
+    });
+
+    for (let seq = 0; seq < 10; seq += 1) f.push({ seq, payload: "x".repeat(50) });
+
+    expect(f.queueByteLength).toBeLessThanOrEqual(220);
+    await f.flushTerminal();
+    expect(flushedBodies(fetchMock)[0].events.map(({ seq }: { seq: number }) => seq)).toEqual([7, 8, 9]);
+  });
+
   it("splits a recovered backlog below the collector body limit", async () => {
     const bodyLimit = 180;
     const fetchMock = vi.fn().mockImplementation((_url, init?: RequestInit) => {
