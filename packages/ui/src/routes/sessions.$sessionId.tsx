@@ -35,9 +35,16 @@ function SessionPage() {
           diagnosticCount={data.diagnosticCount}
           studioEveVersion={health?.eveVersion}
         />
-        <TranscriptViewport contentVersion={data.reducedUpTo}>
+        <TranscriptViewport
+          sessionId={sessionId}
+          contentVersion={data.reducedUpTo}
+        >
           {reduced && reduced.messages.length > 0 ? (
-            <MessageList messages={reduced.messages} events={data.events} />
+            <MessageList
+              sessionId={sessionId}
+              messages={reduced.messages}
+              events={data.events}
+            />
           ) : (
             <CenterNote text="No conversation yet." />
           )}

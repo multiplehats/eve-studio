@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { EveMessage, StoredEvent } from "eve-studio"
 
 import { formatDuration, groupTurns } from "@/lib/session-turns"
@@ -15,13 +15,29 @@ import { TurnDrawer } from "./turn-drawer"
 export function MessageList({
   messages,
   events = [],
+  sessionId,
 }: {
   messages: readonly EveMessage[]
   events?: readonly StoredEvent[]
+  sessionId: string
 }) {
   const turns = useMemo(() => groupTurns(messages, events), [messages, events])
-  const [openTurnId, setOpenTurnId] = useState<string | null>(null)
+  const [openSelection, setOpenSelection] = useState<{
+    sessionId: string
+    turnId: string
+  } | null>(null)
+  const openTurnId =
+    openSelection?.sessionId === sessionId ? openSelection.turnId : null
   const openTurn = turns.find((turn) => turn.id === openTurnId) ?? null
+
+  useEffect(() => {
+    if (
+      openSelection &&
+      (openSelection.sessionId !== sessionId || openTurn === null)
+    ) {
+      setOpenSelection(null)
+    }
+  }, [openSelection, openTurn, sessionId])
 
   return (
     <>
@@ -30,14 +46,15 @@ export function MessageList({
           <TurnView
             key={turn.id}
             turn={turn}
-            onOpen={() => setOpenTurnId(turn.id)}
+            onOpen={() => setOpenSelection({ sessionId, turnId: turn.id })}
           />
         ))}
       </div>
       <TurnDrawer
+        key={sessionId}
         turn={openTurn}
         onOpenChange={(open) => {
-          if (!open) setOpenTurnId(null)
+          if (!open) setOpenSelection(null)
         }}
       />
     </>
