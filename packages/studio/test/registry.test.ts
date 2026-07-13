@@ -128,6 +128,28 @@ describe("grouping and usage", () => {
 });
 
 describe("byte-cap eviction", () => {
+  it("evicts a sole oversized raw event after reducing it", () => {
+    const r = createRegistry({ maxSessionBytes: 10 });
+    r.ingest(env("s", 0, "message.appended", {
+      event: {
+        type: "message.appended",
+        data: {
+          messageDelta: "projected text survives raw eviction",
+          turnId: "turn-1",
+          stepIndex: 0,
+          sequence: 0,
+        },
+      },
+    }));
+
+    const rec = r.getSession("s")!;
+    expect(rec.events).toEqual([]);
+    expect(rec.summary.eventCount).toBe(0);
+    expect(rec.summary.evictedBelow).toBe(1);
+    expect(rec.reducedUpTo).toBe(1);
+    expect(JSON.stringify(rec.reducedState)).toContain("projected text survives raw eviction");
+  });
+
   it("evicts oldest raw events past the cap and records evictedBelow", () => {
     const r = createRegistry({ maxSessionBytes: 2_000 });
     const big = "x".repeat(500);

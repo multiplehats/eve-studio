@@ -13,10 +13,27 @@ export interface StudioServer { url: string; port: number; close(): Promise<void
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const HEARTBEAT_MS = 15_000;
+const INITIAL_DRAIN_TIMEOUT_MS = 1_000;
+const MAX_PENDING_UPDATES = 1_000;
 
 export interface SseWritable {
   write(chunk: string): boolean;
   end(): void;
+}
+
+export interface SseStreamWritable extends SseWritable {
+  writeHead(statusCode: number, headers: Record<string, string>): void;
+  on(event: "close", listener: () => void): unknown;
+  once(event: "close" | "drain", listener: () => void): unknown;
+  off(event: "close" | "drain", listener: () => void): unknown;
+  readonly writableEnded?: boolean;
+}
+
+export interface SseStreamOptions {
+  heartbeatMs?: number;
+  initialDrainTimeoutMs?: number;
+  maxPendingUpdates?: number;
+  onDisconnect?: () => void;
 }
 
 function writeSseChunk(res: SseWritable, chunk: string): boolean {
@@ -27,6 +44,122 @@ function writeSseChunk(res: SseWritable, chunk: string): boolean {
 
 export function writeSseFrame(res: SseWritable, event: string, data: unknown): boolean {
   return writeSseChunk(res, `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function writeInitialSseFrame(
+  res: SseStreamWritable,
+  event: string,
+  data: unknown,
+  timeoutMs: number,
+): Promise<boolean> {
+  const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  if (res.writableEnded) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finish = (drained: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+      res.off("drain", onDrain);
+      res.off("close", onClose);
+      resolve(drained);
+    };
+    const onDrain = () => finish(true);
+    const onClose = () => finish(false);
+
+    // Register before write(): a custom writable is allowed to emit either
+    // event synchronously while processing the chunk.
+    res.once("drain", onDrain);
+    res.once("close", onClose);
+    if (res.write(chunk)) {
+      finish(true);
+      return;
+    }
+    if (settled) return;
+    timeout = setTimeout(() => finish(false), timeoutMs);
+    timeout.unref?.();
+  });
+}
+
+export async function openSseStream(
+  registry: Registry,
+  res: SseStreamWritable,
+  options: SseStreamOptions = {},
+): Promise<void> {
+  const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
+  const initialDrainTimeoutMs = options.initialDrainTimeoutMs ?? INITIAL_DRAIN_TIMEOUT_MS;
+  const maxPendingUpdates = options.maxPendingUpdates ?? MAX_PENDING_UPDATES;
+
+  res.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+
+  let active = true;
+  let ready = false;
+  let overflowed = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let unsubscribe = () => {};
+  const pending: RegistryUpdate[] = [];
+  const disconnect = (end = true) => {
+    if (!active) return;
+    active = false;
+    if (heartbeat !== undefined) clearInterval(heartbeat);
+    unsubscribe();
+    options.onDisconnect?.();
+    if (end && !res.writableEnded) res.end();
+  };
+  const send = (event: string, data: unknown) => {
+    if (!active) return;
+    try {
+      if (!writeSseFrame(res, event, data)) disconnect();
+    } catch {
+      disconnect();
+    }
+  };
+
+  res.on("close", () => disconnect(false));
+
+  // Capture first, then subscribe synchronously. Updates that happen while
+  // the initial write drains are replayed after the snapshot in order.
+  const snapshot = { sessions: registry.getSessions() };
+  unsubscribe = registry.subscribe((update) => {
+    if (!active) return;
+    if (ready) {
+      send("update", update);
+      return;
+    }
+    if (pending.length >= maxPendingUpdates) {
+      overflowed = true;
+      return;
+    }
+    pending.push(update);
+  });
+
+  const initialized = await writeInitialSseFrame(
+    res,
+    "snapshot",
+    snapshot,
+    initialDrainTimeoutMs,
+  );
+  if (!active) return;
+  if (!initialized || overflowed) {
+    disconnect();
+    return;
+  }
+
+  ready = true;
+  for (const update of pending) {
+    send("update", update);
+    if (!active) return;
+  }
+  pending.length = 0;
+  heartbeat = setInterval(() => {
+    if (active && !writeSseChunk(res, ": ping\n\n")) disconnect();
+  }, heartbeatMs);
 }
 
 const MIME: Record<string, string> = {
@@ -123,35 +256,16 @@ export function startStudioServer(opts: StudioServerOptions): Promise<StudioServ
     }
   }
 
-  function handleStream(res: ServerResponse): void {
-    res.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    });
-    let active = true;
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
-    let unsubscribe = () => {};
-    const disconnect = () => {
-      if (!active) return;
-      active = false;
-      if (heartbeat !== undefined) clearInterval(heartbeat);
-      unsubscribe();
-      sseClients.delete(res);
-      if (!res.writableEnded) res.end();
-    };
-    const send = (event: string, data: unknown) => {
-      if (active && !writeSseFrame(res, event, data)) disconnect();
-    };
-
-    res.on("close", disconnect);
-    send("snapshot", { sessions: registry.getSessions() });
-    if (!active) return;
+  async function handleStream(res: ServerResponse): Promise<void> {
     sseClients.add(res);
-    unsubscribe = registry.subscribe((u: RegistryUpdate) => send("update", u));
-    heartbeat = setInterval(() => {
-      if (active && !writeSseChunk(res, ": ping\n\n")) disconnect();
-    }, HEARTBEAT_MS);
+    try {
+      await openSseStream(registry, res, {
+        onDisconnect: () => sseClients.delete(res),
+      });
+    } catch (error) {
+      sseClients.delete(res);
+      throw error;
+    }
   }
 
   function json(res: ServerResponse, status: number, body: unknown): void {

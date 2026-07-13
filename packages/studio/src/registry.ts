@@ -288,7 +288,7 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
   }
 
   function evictIfNeeded(rec: SessionRecord): void {
-    while (rec.bytes > maxSessionBytes && rec.events.size > 1) {
+    while (rec.bytes > maxSessionBytes && rec.events.size > 0) {
       let victim = Infinity;
       for (const p of rec.events.keys()) if (p < rec.reducedUpTo && p < victim) victim = p;
       if (!Number.isFinite(victim)) {

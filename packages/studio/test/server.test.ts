@@ -1,9 +1,10 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../src/registry.js";
-import { startStudioServer, type StudioServer, writeSseFrame } from "../src/server.js";
+import { openSseStream, startStudioServer, type StudioServer, writeSseFrame } from "../src/server.js";
 
 let server: StudioServer | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
@@ -113,6 +114,36 @@ describe("collector server", () => {
     await reader.cancel();
   });
 
+  it("keeps a large initial SSE snapshot connected for later updates", async () => {
+    const registry = createRegistry();
+    for (let i = 0; i < 200; i++) {
+      registry.ingest({
+        ...envelope(`large-${i}`, 0, "session.started"),
+        project: { name: `project-${i}`, root: `/tmp/${"nested/".repeat(80)}${i}` },
+      });
+    }
+    server = await startStudioServer({ registry, port: 0 });
+
+    const res = await fetch(`${server.url}/api/stream`, { headers: { accept: "text/event-stream" } });
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    async function readUntil(marker: string): Promise<void> {
+      while (!buffer.includes(marker)) {
+        const { value, done } = await reader.read();
+        if (done) throw new Error(`SSE closed before ${marker}; got ${buffer.length} bytes`);
+        buffer += decoder.decode(value, { stream: true });
+      }
+    }
+
+    await readUntil("event: snapshot");
+    registry.ingest(envelope("large-0", 1, "session.waiting"));
+    await readUntil('"position":1');
+
+    expect(buffer).toContain("event: update");
+    await reader.cancel();
+  });
+
   it("port conflict rejects with EADDRINUSE", async () => {
     const s = await boot();
     await expect(startStudioServer({ registry: createRegistry(), port: s.port })).rejects.toMatchObject({ code: "EADDRINUSE" });
@@ -130,6 +161,21 @@ describe("collector server", () => {
 });
 
 describe("SSE backpressure", () => {
+  class BackpressuredResponse extends EventEmitter {
+    readonly writes: string[] = [];
+    writableEnded = false;
+    private firstWrite = true;
+
+    writeHead(): void {}
+    write(chunk: string): boolean {
+      this.writes.push(chunk);
+      if (!this.firstWrite) return true;
+      this.firstWrite = false;
+      return false;
+    }
+    end(): void { this.writableEnded = true; }
+  }
+
   it("ends a slow response when a frame cannot be buffered", () => {
     const response = {
       write: vi.fn(() => false),
@@ -138,6 +184,61 @@ describe("SSE backpressure", () => {
 
     expect(writeSseFrame(response, "update", { kind: "event" })).toBe(false);
     expect(response.end).toHaveBeenCalledOnce();
+  });
+
+  it("waits for the initial drain and then sends updates accepted during it", async () => {
+    const registry = createRegistry();
+    const response = new BackpressuredResponse();
+    const opening = openSseStream(registry, response, {
+      heartbeatMs: 60_000,
+      initialDrainTimeoutMs: 100,
+    });
+
+    registry.ingest(envelope("during-drain", 0, "session.started"));
+    expect(response.writableEnded).toBe(false);
+    response.emit("drain");
+    await opening;
+
+    expect(response.writes[0]).toContain("event: snapshot");
+    expect(response.writes[0]).not.toContain("during-drain");
+    expect(response.writes.slice(1).join("\n")).toContain("during-drain");
+    expect(response.writableEnded).toBe(false);
+    response.emit("close");
+  });
+
+  it("disconnects when the bounded initial update buffer overflows", async () => {
+    const registry = createRegistry();
+    const response = new BackpressuredResponse();
+    const opening = openSseStream(registry, response, {
+      heartbeatMs: 60_000,
+      initialDrainTimeoutMs: 100,
+      maxPendingUpdates: 1,
+    });
+
+    registry.ingest(envelope("too-many-pending", 0, "session.started"));
+    response.emit("drain");
+    await opening;
+
+    expect(response.writableEnded).toBe(true);
+    expect(response.writes).toHaveLength(1);
+  });
+
+  it("bounds how long the initial snapshot waits for drain", async () => {
+    vi.useFakeTimers();
+    try {
+      const response = new BackpressuredResponse();
+      const opening = openSseStream(createRegistry(), response, {
+        heartbeatMs: 60_000,
+        initialDrainTimeoutMs: 25,
+      });
+
+      await vi.advanceTimersByTimeAsync(25);
+      await opening;
+
+      expect(response.writableEnded).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
