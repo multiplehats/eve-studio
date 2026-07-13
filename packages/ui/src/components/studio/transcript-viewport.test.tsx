@@ -23,10 +23,6 @@ beforeEach(() => {
       disconnect() {}
     }
   )
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: vi.fn(() => ({ matches: false })),
-  })
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
     value: vi.fn(),
@@ -34,7 +30,7 @@ beforeEach(() => {
 })
 
 describe("TranscriptViewport", () => {
-  it("pauses away from the bottom and lets the viewer jump to new content", () => {
+  it("pauses away from the bottom and jumps immediately back into follow mode", () => {
     const scrollTo = vi.fn()
     const { rerender } = render(
       <TranscriptViewport sessionId="session-one" contentVersion={1}>
@@ -59,7 +55,11 @@ describe("TranscriptViewport", () => {
     const jump = screen.getByRole("button", { name: "Jump to latest" })
     expect(scrollTo).not.toHaveBeenCalled()
     fireEvent.click(jump)
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1_000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1_000, behavior: "auto" })
+    expect(scrollTo).not.toHaveBeenCalledWith({
+      top: 1_000,
+      behavior: "smooth",
+    })
     expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull()
   })
 

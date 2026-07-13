@@ -24,20 +24,11 @@ export function TranscriptViewport({
   const [following, setFollowing] = useState(true)
   const [hasUnseenContent, setHasUnseenContent] = useState(false)
 
-  const scrollToLatest = useCallback(
-    (behavior: ScrollBehavior = "auto"): void => {
-      const viewport = viewportRef.current
-      if (!viewport) return
-      const reduceMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches
-      viewport.scrollTo({
-        top: viewport.scrollHeight,
-        behavior: reduceMotion ? "auto" : behavior,
-      })
-    },
-    []
-  )
+  const scrollToLatest = useCallback((): void => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" })
+  }, [])
 
   useLayoutEffect(() => {
     if (previousSessionIdRef.current === sessionId) return
@@ -102,7 +93,6 @@ export function TranscriptViewport({
           onClick={() => {
             setFollowing(true)
             setHasUnseenContent(false)
-            scrollToLatest("smooth")
           }}
         >
           Jump to latest
