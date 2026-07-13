@@ -185,11 +185,14 @@ jobs:
             case "$tarball" in
               *.tgz)
                 spec="$(tar -xOf "release-artifacts/$tarball" package/package.json | node -e 'let source=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { source += chunk; }); process.stdin.on("end", () => { const manifest = JSON.parse(source); if (typeof manifest.name !== "string" || typeof manifest.version !== "string") process.exit(1); process.stdout.write(manifest.name + "@" + manifest.version); });')"
-                if npm view "$spec" version >/dev/null 2>&1; then
+                if lookup="$(npm view "$spec" version --json 2>&1)"; then
                   echo "$spec is already published; skipping"
-                else
+                elif printf '%s\n' "$lookup" | grep -Eq '"code"[[:space:]]*:[[:space:]]*"E404"'; then
                   printf '%s  %s\n' "$checksum" "$tarball" >> publish-artifacts/SHA256SUMS
                   cp "release-artifacts/$tarball" "publish-artifacts/$tarball"
+                else
+                  printf '%s\n' "$lookup" >&2
+                  exit 1
                 fi
                 ;;
               *)

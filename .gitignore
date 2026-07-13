@@ -7,6 +7,8 @@ node_modules/
 !.env.example
 .DS_Store
 dist/
+release-artifacts/
+publish-artifacts/
 .eve/
 .workflow-data/
 .superpowers/

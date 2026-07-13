@@ -140,6 +140,30 @@ Do not manually edit package versions or changelog sections. The release workflo
 
 Publishing uses npm Trusted Publishing through GitHub OIDC. Do not add npm tokens to this repository.
 
+Configure the same GitHub Actions trusted publisher in the npm settings for
+both `eve-studio` and `@eve-studio/extension`:
+
+| npm field            | Value          |
+| -------------------- | -------------- |
+| Organization or user | `multiplehats` |
+| Repository           | `eve-studio`   |
+| Workflow filename    | `release.yml`  |
+| Environment name     | `npm-publish`  |
+| Allowed actions      | `npm publish`  |
+
+`eve-studio` intentionally remains unscoped so the primary command stays
+`npx eve-studio`; the extension uses the `@eve-studio` organization scope.
+Unscoped package owners are npm user accounts, so a personal maintainer in its
+owner list is expected. Audit registry access before a release with:
+
+```sh
+npm owner ls eve-studio
+npm access list collaborators @eve-studio/extension
+```
+
+Add another npm user with `npm owner add <user> eve-studio` only when a second
+human maintainer needs release access.
+
 ## Commit convention
 
 Use clear, conventional commit messages when possible:
