@@ -1,6 +1,6 @@
 {
   "name": "@eve-studio/extension",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Capture extension for eve-studio. Streams local eve session events to the Studio collector for live, read-only inspection.",
   "license": "MIT",
