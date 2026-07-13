@@ -11,7 +11,7 @@ const TITLE = "eve-studio: Watch your agent work"
 const DESCRIPTION =
   "One command mounts a live observability workspace beside your eve agent, showing sessions, messages, tool calls, and usage, streamed to your browser."
 const SITE_URL = "https://eve-studio-tau.vercel.app"
-const SOCIAL_IMAGE = `${SITE_URL}/og-image.jpg`
+const SOCIAL_IMAGE = `${SITE_URL}/og-image.webp`
 
 export const Route = createRootRoute({
   head: () => ({
@@ -27,8 +27,9 @@ export const Route = createRootRoute({
       { property: "og:site_name", content: "eve-studio" },
       { property: "og:url", content: SITE_URL },
       { property: "og:image", content: SOCIAL_IMAGE },
-      { property: "og:image:width", content: "1200" },
-      { property: "og:image:height", content: "630" },
+      { property: "og:image:type", content: "image/webp" },
+      { property: "og:image:width", content: "2000" },
+      { property: "og:image:height", content: "1170" },
       {
         property: "og:image:alt",
         content: "Eve Studio showing a captured agent session",
