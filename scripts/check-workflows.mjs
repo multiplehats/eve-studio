@@ -204,6 +204,81 @@ function checkReleasePublishEligibility(file, workflow) {
   }
 }
 
+function jobRunCommands(job) {
+  if (!isMapping(job) || !Array.isArray(job.steps)) return [];
+  return job.steps
+    .filter((step) => isMapping(step) && typeof step.run === "string")
+    .map((step) => step.run.trim());
+}
+
+function requireRunCommands(file, jobName, job, requiredCommands) {
+  if (!isMapping(job)) {
+    fail(file, `workflow must define a ${jobName} job`);
+    return;
+  }
+
+  const commands = jobRunCommands(job);
+  for (const command of requiredCommands) {
+    if (!commands.includes(command)) {
+      fail(file, `${jobName} must run \`${command}\``);
+    }
+  }
+}
+
+function requireCommandBefore(file, jobName, job, command, boundary) {
+  const commands = jobRunCommands(job);
+  const commandIndex = commands.indexOf(command);
+  const boundaryIndex = commands.indexOf(boundary);
+  if (commandIndex === -1 || boundaryIndex === -1 || commandIndex >= boundaryIndex) {
+    fail(file, `${jobName} must run \`${command}\` before \`${boundary}\``);
+  }
+}
+
+function checkCiLaunchGates(file, workflow) {
+  const checksJob = workflow.jobs?.checks;
+  const requiredCommands = [
+    "pnpm lint",
+    "pnpm format:check",
+    "pnpm --filter @eve-studio/web build",
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  ];
+  requireRunCommands(file, "checks", checksJob, requiredCommands);
+  requireCommandBefore(
+    file,
+    "checks",
+    checksJob,
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  );
+}
+
+function checkReleaseBehaviorGates(file, workflow) {
+  const buildPackJob = workflow.jobs?.["build-pack"];
+  const requiredCommands = [
+    "pnpm smoke:studio",
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  ];
+  requireRunCommands(file, "build-pack", buildPackJob, requiredCommands);
+  for (const command of requiredCommands) {
+    requireCommandBefore(
+      file,
+      "build-pack",
+      buildPackJob,
+      command,
+      "pnpm check:release-artifacts",
+    );
+  }
+  requireCommandBefore(
+    file,
+    "build-pack",
+    buildPackJob,
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  );
+}
+
 function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob)) {
@@ -415,7 +490,10 @@ function checkFile(file) {
   }
 
   walk(workflow, { root: true });
-  if (fileName === "release.yml") {
+  if (fileName === "ci.yml") {
+    checkCiLaunchGates(file, workflow);
+  } else if (fileName === "release.yml") {
+    checkReleaseBehaviorGates(file, workflow);
     checkReleasePublishEligibility(file, workflow);
     checkOidcPublishJob(file, workflow);
   }

@@ -152,6 +152,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Smoke Studio
+        run: pnpm smoke:studio
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke browser
+        run: pnpm smoke:browser
+
       - name: Pack and inspect release tarballs
         run: pnpm check:release-artifacts
 
