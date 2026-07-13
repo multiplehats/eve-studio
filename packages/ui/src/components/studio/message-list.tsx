@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { EveMessage, StoredEvent } from "eve-studio"
 
-import { formatDuration, groupTurns, type Turn } from "@/lib/session-turns"
-import { ArrowRight01Icon, Clock01Icon, Wrench01Icon } from "@hugeicons/core-free-icons"
+import { formatDuration, groupTurns } from "@/lib/session-turns"
+import type { Turn } from "@/lib/session-turns"
+import {
+  ArrowRight01Icon,
+  Clock01Icon,
+  Wrench01Icon,
+} from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { PartView } from "./message-parts"
 import { TurnDrawer } from "./turn-drawer"
@@ -10,24 +15,46 @@ import { TurnDrawer } from "./turn-drawer"
 export function MessageList({
   messages,
   events = [],
+  sessionId,
 }: {
   messages: readonly EveMessage[]
   events?: readonly StoredEvent[]
+  sessionId: string
 }) {
   const turns = useMemo(() => groupTurns(messages, events), [messages, events])
-  const [openTurn, setOpenTurn] = useState<Turn | null>(null)
+  const [openSelection, setOpenSelection] = useState<{
+    sessionId: string
+    turnId: string
+  } | null>(null)
+  const openTurnId =
+    openSelection?.sessionId === sessionId ? openSelection.turnId : null
+  const openTurn = turns.find((turn) => turn.id === openTurnId) ?? null
+
+  useEffect(() => {
+    if (
+      openSelection &&
+      (openSelection.sessionId !== sessionId || openTurn === null)
+    ) {
+      setOpenSelection(null)
+    }
+  }, [openSelection, openTurn, sessionId])
 
   return (
     <>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-8">
         {turns.map((turn) => (
-          <TurnView key={turn.id} turn={turn} onOpen={() => setOpenTurn(turn)} />
+          <TurnView
+            key={turn.id}
+            turn={turn}
+            onOpen={() => setOpenSelection({ sessionId, turnId: turn.id })}
+          />
         ))}
       </div>
       <TurnDrawer
+        key={sessionId}
         turn={openTurn}
         onOpenChange={(open) => {
-          if (!open) setOpenTurn(null)
+          if (!open) setOpenSelection(null)
         }}
       />
     </>
@@ -38,7 +65,7 @@ function TurnView({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
   return (
     <>
       {turn.user && (
-        <div className="bg-muted ml-auto max-w-[85%] rounded-2xl px-4 py-2.5">
+        <div className="ml-auto max-w-[85%] rounded-2xl bg-muted px-4 py-2.5">
           {turn.user.parts.map((part, i) => (
             <PartView key={i} part={part} />
           ))}
@@ -51,7 +78,10 @@ function TurnView({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
             <PartView key={i} part={part} />
           ))}
           {turn.assistant.metadata?.status === "streaming" && (
-            <span className="bg-foreground/70 h-4 w-2 animate-pulse rounded-sm" aria-label="streaming" />
+            <span
+              className="h-4 w-2 animate-pulse rounded-sm bg-foreground/70"
+              aria-label="streaming"
+            />
           )}
         </div>
       )}
@@ -68,22 +98,37 @@ function TurnMetaRow({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
       type="button"
       onClick={onOpen}
       aria-label={`Open turn ${turn.id} — view and copy`}
-      className="text-muted-foreground hover:text-foreground hover:bg-muted -mx-1.5 flex w-fit cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors"
+      className="-mx-1.5 flex w-fit cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       {turn.toolCount > 0 && (
         <span className="flex items-center gap-1">
-          <HugeiconsIcon icon={Wrench01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          <HugeiconsIcon
+            icon={Wrench01Icon}
+            className="size-3.5"
+            strokeWidth={2}
+            aria-hidden="true"
+          />
           {turn.toolCount} {turn.toolCount === 1 ? "tool" : "tools"}
         </span>
       )}
       {turn.durationMs !== undefined && (
         <span className="flex items-center gap-1">
-          <HugeiconsIcon icon={Clock01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          <HugeiconsIcon
+            icon={Clock01Icon}
+            className="size-3.5"
+            strokeWidth={2}
+            aria-hidden="true"
+          />
           {formatDuration(turn.durationMs)}
         </span>
       )}
       <span className="font-medium">View &amp; copy</span>
-      <HugeiconsIcon icon={ArrowRight01Icon} className="size-3.5" strokeWidth={2} aria-hidden="true" />
+      <HugeiconsIcon
+        icon={ArrowRight01Icon}
+        className="size-3.5"
+        strokeWidth={2}
+        aria-hidden="true"
+      />
     </button>
   )
 }

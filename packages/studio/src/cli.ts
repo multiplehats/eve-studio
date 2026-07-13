@@ -1,22 +1,29 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { createStudioProgram, type StudioCliOptions } from "./cli-program.js";
+import { createStudioProgram, invalidStudioPortMessage, parseStudioPort, type StudioCliOptions } from "./cli-program.js";
 import { applyDiskScan } from "./disk-scan.js";
 import { findAgentProjects } from "./locate.js";
-import { detectPackageManager, isExtensionMounted, mountInstructions, scaffoldMount } from "./mount.js";
+import {
+  createdMountFile,
+  detectPackageManager,
+  isExtensionMounted,
+  mountInstructions,
+  removeGeneratedMountFile,
+  scaffoldMount,
+} from "./mount.js";
 import { createRegistry } from "./registry.js";
 import { startStudioServer } from "./server.js";
-import { installedEveVersion, meetsMinimum } from "./version-gate.js";
+import { installedEveVersion, SUPPORTED_EVE_RANGE, supportsEveVersion } from "./version-gate.js";
 
 const args = createStudioProgram().parse().opts<StudioCliOptions>();
-const port = args.port !== undefined ? Number(args.port) : 43110;
 function die(msg: string): never { console.error(`eve-studio: ${msg}`); process.exit(1); }
-if (!Number.isInteger(port) || port < 0 || port > 65535) die(`invalid --port ${args.port}`);
+const port = parseStudioPort(args.port);
+if (port === undefined) die(invalidStudioPortMessage(args.port));
 
 async function confirm(question: string): Promise<boolean> {
   if (args.yes) return true;
@@ -49,23 +56,31 @@ const project = await resolveProject();
 
 const eveVersion = installedEveVersion(project);
 if (eveVersion === undefined) die(`eve is not installed in ${project}. Run your package manager's install first.`);
-if (!meetsMinimum(eveVersion)) {
-  die(`eve-studio needs eve >= 0.22.3 (found ${eveVersion}). Upgrade: ${detectPackageManager(project)} add eve@latest`);
+if (!supportsEveVersion(eveVersion)) {
+  die(`eve-studio supports eve ${SUPPORTED_EVE_RANGE} (found ${eveVersion}). Install a compatible version: ${detectPackageManager(project)} add eve@^0.22.3`);
 }
 
 if (!isExtensionMounted(project)) {
   if (await confirm(`Mount @eve-studio/extension into ${project}?`)) {
-    let mountFile: string | undefined;
+    let rollbackFile: string | undefined;
     try {
       const result = scaffoldMount(project);
-      mountFile = result.mountFile;
-      console.log(`eve-studio: wrote ${mountFile}`);
-      const r = spawnSync(result.command[0], result.command.slice(1), { cwd: project, stdio: "inherit" });
-      if (r.status !== 0) throw new Error(`${result.command.join(" ")} exited ${r.status}`);
+      if (result.kind === "conflict") {
+        console.error(`eve-studio: ${result.mountFile} already exists with different content; left it unchanged`);
+        console.error(mountInstructions(project));
+      } else {
+        rollbackFile = createdMountFile(result);
+        console.log(`eve-studio: ${result.created ? "wrote" : "using"} ${result.mountFile}`);
+        const r = spawnSync(result.command[0], result.command.slice(1), { cwd: project, stdio: "inherit" });
+        if (r.status !== 0) throw new Error(`${result.command.join(" ")} exited ${r.status}`);
+      }
     } catch (err) {
-      if (mountFile) {
-        rmSync(mountFile, { force: true });
-        console.error(`eve-studio: removed ${mountFile}. Recreate it after the install succeeds (steps below).`);
+      if (rollbackFile) {
+        if (removeGeneratedMountFile(rollbackFile)) {
+          console.error(`eve-studio: removed ${rollbackFile}. Recreate it after the install succeeds (steps below).`);
+        } else if (existsSync(rollbackFile)) {
+          console.error(`eve-studio: kept ${rollbackFile} because it changed while the install was running.`);
+        }
       }
       console.error(`eve-studio: mount failed (${err instanceof Error ? err.message : err}); continuing without it`);
       console.error(mountInstructions(project));

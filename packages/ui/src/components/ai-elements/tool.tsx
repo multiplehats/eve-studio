@@ -1,4 +1,5 @@
-import { Badge, type BadgeProps } from "@/components/reui/badge"
+import { Badge } from "@/components/reui/badge"
+import type { BadgeProps } from "@/components/reui/badge"
 import {
   Collapsible,
   CollapsibleContent,
@@ -18,11 +19,21 @@ import type { ComponentProps } from "react"
 // (Confirmation) lands.
 type ToolState = EveDynamicToolPart["state"]
 
-const TOOL_STATE: Record<ToolState, { label: string; variant: BadgeProps["variant"] }> = {
+// Keep the lookup partial at the type boundary so a newer eve state still gets
+// a readable fallback when Studio is running against a newer event stream.
+const TOOL_STATE: Partial<
+  Record<ToolState, { label: string; variant: BadgeProps["variant"] }>
+> = {
   "input-streaming": { label: "calling…", variant: "info-light" },
   "input-available": { label: "called", variant: "info-light" },
-  "approval-requested": { label: "awaiting approval", variant: "warning-light" },
-  "approval-responded": { label: "approval answered", variant: "warning-light" },
+  "approval-requested": {
+    label: "awaiting approval",
+    variant: "warning-light",
+  },
+  "approval-responded": {
+    label: "approval answered",
+    variant: "warning-light",
+  },
   "output-available": { label: "done", variant: "success-light" },
   "output-error": { label: "error", variant: "destructive-light" },
   "output-denied": { label: "denied", variant: "destructive-light" },
@@ -39,21 +50,28 @@ export function Tool({ className, ...props }: ToolProps) {
   )
 }
 
-export type ToolHeaderProps = { name: string; state: ToolState; className?: string }
+export type ToolHeaderProps = {
+  name: string
+  state: ToolState
+  className?: string
+}
 
 export function ToolHeader({ name, state, className }: ToolHeaderProps) {
-  const meta = TOOL_STATE[state] ?? { label: state, variant: "outline" as const }
+  const meta = TOOL_STATE[state] ?? {
+    label: state,
+    variant: "outline" as const,
+  }
   return (
     <CollapsibleTrigger
       className={cn(
         "group flex w-full items-center justify-between gap-4 px-3 py-2",
-        className,
+        className
       )}
     >
       <span className="flex min-w-0 items-center gap-2">
         <HugeiconsIcon
           icon={Wrench01Icon}
-          className="text-muted-foreground size-4 shrink-0"
+          className="size-4 shrink-0 text-muted-foreground"
           strokeWidth={2}
           aria-hidden="true"
         />
@@ -64,7 +82,7 @@ export function ToolHeader({ name, state, className }: ToolHeaderProps) {
       </span>
       <HugeiconsIcon
         icon={ArrowDown01Icon}
-        className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[panel-open]:rotate-180"
+        className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-180"
         strokeWidth={2}
         aria-hidden="true"
       />
@@ -77,7 +95,7 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>
 export function ToolContent({ className, ...props }: ToolContentProps) {
   return (
     <CollapsibleContent
-      className={cn("text-popover-foreground border-t outline-none", className)}
+      className={cn("border-t text-popover-foreground outline-none", className)}
       {...props}
     />
   )
@@ -86,10 +104,10 @@ export function ToolContent({ className, ...props }: ToolContentProps) {
 function ToolJson({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="space-y-1.5 p-3">
-      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </p>
-      <pre className="bg-muted/50 max-h-64 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
+      <pre className="max-h-64 overflow-auto rounded bg-muted/50 p-2 text-xs whitespace-pre-wrap">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>
@@ -109,10 +127,10 @@ export function ToolOutput({ output, errorText }: ToolOutputProps) {
   if (errorText !== undefined) {
     return (
       <div className="space-y-1.5 p-3">
-        <p className="text-destructive text-xs font-medium tracking-wide uppercase">
+        <p className="text-xs font-medium tracking-wide text-destructive uppercase">
           Error
         </p>
-        <div className="bg-destructive/10 text-destructive rounded p-2 text-xs whitespace-pre-wrap">
+        <div className="rounded bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">
           {errorText}
         </div>
       </div>

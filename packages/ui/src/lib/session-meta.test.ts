@@ -1,28 +1,73 @@
 import { describe, expect, it } from "vitest"
 import type { SessionSummary } from "eve-studio"
-import { formatTokens, groupByProject, shortSessionId, timeAgo } from "./session-meta"
+import {
+  formatTokens,
+  groupByProject,
+  shortSessionId,
+  timeAgo,
+} from "./session-meta"
 
-function summary(sessionId: string, project: string, updatedAt: number): SessionSummary {
+function summary(
+  sessionId: string,
+  project: string,
+  updatedAt: number,
+  root = "/r"
+): SessionSummary {
   return {
-    sessionId, agent: "a", project: { name: project, root: "/r" },
-    processInstanceId: "i", processKind: "unknown", group: "g",
-    status: "working", usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, steps: 0 },
-    eventCount: 0, maxPosition: 0, evictedBelow: 0, updatedAt,
+    sessionId,
+    agent: "a",
+    project: { name: project, root },
+    processInstanceId: "i",
+    processKind: "unknown",
+    group: "g",
+    status: "working",
+    usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, steps: 0 },
+    eventCount: 0,
+    maxPosition: 0,
+    evictedBelow: 0,
+    updatedAt,
   }
 }
 
 describe("groupByProject", () => {
   it("groups by project name, newest session first, newest project group first", () => {
     const groups = groupByProject([
-      summary("old-a", "alpha", 10), summary("new-b", "beta", 40),
-      summary("new-a", "alpha", 30), summary("old-b", "beta", 20),
+      summary("old-a", "alpha", 10),
+      summary("new-b", "beta", 40),
+      summary("new-a", "alpha", 30),
+      summary("old-b", "beta", 20),
     ])
-    expect(groups.map(([name]) => name)).toEqual(["beta", "alpha"])
-    expect(groups[0][1].map((s) => s.sessionId)).toEqual(["new-b", "old-b"])
-    expect(groups[1][1].map((s) => s.sessionId)).toEqual(["new-a", "old-a"])
+    expect(groups.map((group) => group.label)).toEqual(["beta", "alpha"])
+    expect(groups[0].sessions.map((s) => s.sessionId)).toEqual([
+      "new-b",
+      "old-b",
+    ])
+    expect(groups[1].sessions.map((s) => s.sessionId)).toEqual([
+      "new-a",
+      "old-a",
+    ])
   })
   it("names blank projects", () => {
-    expect(groupByProject([summary("s", "", 1)])[0][0]).toBe("(unknown project)")
+    expect(groupByProject([summary("s", "", 1)])[0].label).toBe(
+      "(unknown project)"
+    )
+  })
+  it("keeps same-name projects with different roots in separate, disambiguated groups", () => {
+    const groups = groupByProject([
+      summary("one", "agent", 30, "aaa111bbb222"),
+      summary("two", "agent", 20, "ccc333ddd444"),
+      summary("three", "agent", 10, "aaa111bbb222"),
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups.map((group) => group.label)).toEqual([
+      "agent · aaa111",
+      "agent · ccc333",
+    ])
+    expect(groups[0].sessions.map((session) => session.sessionId)).toEqual([
+      "one",
+      "three",
+    ])
   })
 })
 

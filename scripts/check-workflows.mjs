@@ -12,6 +12,19 @@ const allowList = new Map([
 ]);
 
 const failures = [];
+const mainRefCondition = "github.ref == 'refs/heads/main'";
+
+const versionPatchCommand = `for changelog in packages/studio/CHANGELOG.md packages/extension/CHANGELOG.md; do
+  if [ -e "$changelog" ]; then
+    git add --intent-to-add "$changelog"
+  fi
+done
+if git diff --quiet; then
+  echo "has_changes=false" >> "$GITHUB_OUTPUT"
+else
+  echo "has_changes=true" >> "$GITHUB_OUTPUT"
+  git diff --binary > changeset-version.patch
+fi`;
 
 function fail(file, message) {
   failures.push(`${file}: ${message}`);
@@ -81,11 +94,14 @@ while IFS='  ' read -r checksum tarball; do
   case "$tarball" in
     *.tgz)
       spec="$(tar -xOf "release-artifacts/$tarball" package/package.json | node -e 'let source=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { source += chunk; }); process.stdin.on("end", () => { const manifest = JSON.parse(source); if (typeof manifest.name !== "string" || typeof manifest.version !== "string") process.exit(1); process.stdout.write(manifest.name + "@" + manifest.version); });')"
-      if npm view "$spec" version >/dev/null 2>&1; then
+      if lookup="$(npm view "$spec" version --json 2>&1)"; then
         echo "$spec is already published; skipping"
-      else
+      elif printf '%s\\n' "$lookup" | grep -Eq '"code"[[:space:]]*:[[:space:]]*"E404"'; then
         printf '%s  %s\\n' "$checksum" "$tarball" >> publish-artifacts/SHA256SUMS
         cp "release-artifacts/$tarball" "publish-artifacts/$tarball"
+      else
+        printf '%s\\n' "$lookup" >&2
+        exit 1
       fi
       ;;
     *)
@@ -204,6 +220,103 @@ function checkReleasePublishEligibility(file, workflow) {
   }
 }
 
+function jobRunCommands(job) {
+  if (!isMapping(job) || !Array.isArray(job.steps)) return [];
+  return job.steps
+    .filter((step) => isMapping(step) && typeof step.run === "string")
+    .map((step) => step.run.trim());
+}
+
+function requireRunCommands(file, jobName, job, requiredCommands) {
+  if (!isMapping(job)) {
+    fail(file, `workflow must define a ${jobName} job`);
+    return;
+  }
+
+  const commands = jobRunCommands(job);
+  for (const command of requiredCommands) {
+    if (!commands.includes(command)) {
+      fail(file, `${jobName} must run \`${command}\``);
+    }
+  }
+}
+
+function requireCommandBefore(file, jobName, job, command, boundary) {
+  const commands = jobRunCommands(job);
+  const commandIndex = commands.indexOf(command);
+  const boundaryIndex = commands.indexOf(boundary);
+  if (commandIndex === -1 || boundaryIndex === -1 || commandIndex >= boundaryIndex) {
+    fail(file, `${jobName} must run \`${command}\` before \`${boundary}\``);
+  }
+}
+
+function checkCiLaunchGates(file, workflow) {
+  const checksJob = workflow.jobs?.checks;
+  const requiredCommands = [
+    "pnpm lint",
+    "pnpm format:check",
+    "pnpm --filter @eve-studio/web build",
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  ];
+  requireRunCommands(file, "checks", checksJob, requiredCommands);
+  requireCommandBefore(
+    file,
+    "checks",
+    checksJob,
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  );
+}
+
+function checkReleaseBehaviorGates(file, workflow) {
+  const buildPackJob = workflow.jobs?.["build-pack"];
+  const requiredCommands = [
+    "pnpm smoke:studio",
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  ];
+  requireRunCommands(file, "build-pack", buildPackJob, requiredCommands);
+  for (const command of requiredCommands) {
+    requireCommandBefore(
+      file,
+      "build-pack",
+      buildPackJob,
+      command,
+      "pnpm check:release-artifacts",
+    );
+  }
+  requireCommandBefore(
+    file,
+    "build-pack",
+    buildPackJob,
+    "pnpm exec playwright install --with-deps chromium",
+    "pnpm smoke:browser",
+  );
+}
+
+function checkReleaseRefAndVersionPatch(file, workflow) {
+  const expectedConditions = new Map([
+    ["version-plan", mainRefCondition],
+    ["version-pr", `${mainRefCondition} && needs.version-plan.outputs.has_changes == 'true'`],
+    ["build-pack", `${mainRefCondition} && needs.version-plan.outputs.has_changes == 'false'`],
+    ["publish", `${mainRefCondition} && needs.build-pack.outputs.has_publishable_tarballs == 'true'`],
+  ]);
+  for (const [jobName, expected] of expectedConditions) {
+    if (workflow.jobs?.[jobName]?.if !== expected) {
+      fail(file, `${jobName} must be restricted to refs/heads/main`);
+    }
+  }
+
+  const versionPlan = workflow.jobs?.["version-plan"];
+  const decideStep = Array.isArray(versionPlan?.steps)
+    ? versionPlan.steps.find((step) => isMapping(step) && step.id === "decide")
+    : undefined;
+  if (!isMapping(decideStep) || typeof decideStep.run !== "string" || decideStep.run.trim() !== versionPatchCommand) {
+    fail(file, "version-plan must include new package changelogs in the version patch");
+  }
+}
+
 function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob)) {
@@ -227,7 +340,7 @@ function checkOidcPublishJob(file, workflow) {
   if (publishJob.needs !== "build-pack") {
     fail(file, "OIDC publish job must depend only on build-pack eligibility");
   }
-  if (publishJob.if !== "needs.build-pack.outputs.has_publishable_tarballs == 'true'") {
+  if (publishJob.if !== `${mainRefCondition} && needs.build-pack.outputs.has_publishable_tarballs == 'true'`) {
     fail(file, "OIDC publish job must run only when checksum-bound tarballs are eligible");
   }
 
@@ -415,7 +528,11 @@ function checkFile(file) {
   }
 
   walk(workflow, { root: true });
-  if (fileName === "release.yml") {
+  if (fileName === "ci.yml") {
+    checkCiLaunchGates(file, workflow);
+  } else if (fileName === "release.yml") {
+    checkReleaseBehaviorGates(file, workflow);
+    checkReleaseRefAndVersionPatch(file, workflow);
     checkReleasePublishEligibility(file, workflow);
     checkOidcPublishJob(file, workflow);
   }

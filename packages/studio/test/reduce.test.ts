@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../src/registry.js";
 import type { IngestEnvelope } from "../src/types.js";
 
@@ -7,12 +7,28 @@ const FIXTURE: IngestEnvelope[] = readFileSync(new URL("./fixtures/mock-eval-env
   .trim().split("\n").map((l) => JSON.parse(l));
 
 describe("server-side reduction", () => {
+  it("shows compact assistant deltas live without mutating the stored event", () => {
+    const r = createRegistry();
+    r.ingest({
+      ...FIXTURE[0],
+      seq: 0,
+      event: {
+        type: "message.appended",
+        data: { messageDelta: "streaming now", sequence: 0, stepIndex: 0, turnId: "turn-live" },
+      },
+    });
+
+    const rec = r.getSession(FIXTURE[0].sessionId)!;
+    expect(JSON.stringify(rec.reducedState)).toContain("streaming now");
+    expect(rec.events[0]!.event.data).not.toHaveProperty("messageSoFar");
+  });
+
   it("rebuilds full assistant text from messageSoFar-STRIPPED deltas (the fixture is stripped)", () => {
     const r = createRegistry();
     for (const e of FIXTURE) r.ingest(e);
     const [summary] = r.getSessions();
     const rec = r.getSession(summary.sessionId)!;
-    expect(rec.reducerError).toBeUndefined();
+    expect(rec.diagnostics).toEqual([]);
     const text = JSON.stringify(rec.reducedState);
     expect(text).toContain("MOCK[1]: ping one");           // deterministic mock responder output
     expect(text).toContain("MOCK[2]: ping two");
@@ -28,7 +44,7 @@ describe("server-side reduction", () => {
     expect(r.getSession(id)!.reducedUpTo).toBe(1);         // stalled at the gap
     r.ingest(e1);                                          // gap fills
     expect(r.getSession(id)!.reducedUpTo).toBe(3);         // caught up through position 2
-    expect(r.getSession(id)!.reducerError).toBeUndefined();
+    expect(r.getSession(id)!.diagnostics).toEqual([]);
   });
 
   it("rebases after a never-received prefix persists: mid-session attach reduces from the first held position", () => {
@@ -42,7 +58,7 @@ describe("server-side reduction", () => {
     const rec = r.getSession(late[0].sessionId)!;
     expect(rec.summary.degraded).toBe("gap");
     expect(rec.reducedUpTo).toBe(rec.summary.maxPosition + 1);      // rebase then full catch-up
-    expect(rec.reducerError).toBeUndefined();
+    expect(rec.diagnostics).toEqual([]);
   });
 
   it("cap pressure forces an immediate rebase: the byte cap survives a missing prefix", () => {
@@ -61,7 +77,7 @@ describe("server-side reduction", () => {
     r.ingest({ ...FIXTURE[0] });
     r.ingest({ ...FIXTURE[0], seq: 1, event: { type: "totally.unknown.v99", data: { x: 1 } } });
     const rec = r.getSession(FIXTURE[0].sessionId)!;
-    expect(rec.reducerError).toBeUndefined();
+    expect(rec.diagnostics).toEqual([]);
   });
 
   it("never evicts unreduced events; evicted reduced events survive in reducedState", () => {
@@ -73,5 +89,84 @@ describe("server-side reduction", () => {
     const rec = r.getSession(summary.sessionId)!;
     expect(summary.evictedBelow).toBeGreaterThan(0);       // eviction actually happened
     expect(JSON.stringify(rec.reducedState)).toContain("MOCK[1]: ping one"); // content survives raw eviction
+  });
+});
+
+describe("projection recovery", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("recovers a leading gap after the dwell without another ingest", () => {
+    vi.useFakeTimers();
+    const r = createRegistry({ rebaseAfterMs: 50 });
+    const late = { ...FIXTURE[4]!, seq: 5 };
+
+    r.ingest(late);
+    expect(r.getSession(late.sessionId)!.reducedUpTo).toBe(0);
+
+    vi.advanceTimersByTime(50);
+
+    const rec = r.getSession(late.sessionId)!;
+    expect(rec.summary.degraded).toBe("gap");
+    expect(rec.reducedUpTo).toBe(6);
+    expect(JSON.stringify(rec.reducedState)).toContain("MOCK[1]: ping one");
+  });
+
+  it("skips an expired interior gap while preserving the reduced prefix", () => {
+    vi.useFakeTimers();
+    const r = createRegistry({ rebaseAfterMs: 50 });
+    const base = FIXTURE[0]!;
+    r.ingest({
+      ...base,
+      seq: 0,
+      event: { type: "message.received", data: { message: "prefix", sequence: 0, turnId: "turn-1" } },
+    });
+    r.ingest({
+      ...base,
+      seq: 2,
+      event: { type: "message.appended", data: { messageDelta: "suffix", sequence: 1, stepIndex: 0, turnId: "turn-2" } },
+    });
+
+    vi.advanceTimersByTime(50);
+
+    const rec = r.getSession(base.sessionId)!;
+    expect(rec.reducedUpTo).toBe(3);
+    expect(JSON.stringify(rec.reducedState)).toContain("prefix");
+    expect(JSON.stringify(rec.reducedState)).toContain("suffix");
+  });
+
+  it("cancels gap recovery when the missing event arrives within the dwell", () => {
+    vi.useFakeTimers();
+    const r = createRegistry({ rebaseAfterMs: 50 });
+    const [e0, e1, e2] = FIXTURE.slice(0, 3);
+    r.ingest(e0!);
+    r.ingest(e2!);
+    vi.advanceTimersByTime(25);
+    r.ingest(e1!);
+    vi.advanceTimersByTime(50);
+
+    const rec = r.getSession(e0!.sessionId)!;
+    expect(rec.reducedUpTo).toBe(3);
+    expect(rec.summary.degraded).toBeUndefined();
+  });
+
+  it("records bounded diagnostics and continues after reducer failures", () => {
+    const r = createRegistry();
+    const base = FIXTURE[0]!;
+    for (let seq = 0; seq < 7; seq++) {
+      r.ingest({ ...base, seq, event: { type: "message.received" } });
+    }
+    r.ingest({
+      ...base,
+      seq: 7,
+      event: { type: "message.appended", data: { messageDelta: "still live", sequence: 0, stepIndex: 0, turnId: "turn-ok" } },
+    });
+
+    const rec = r.getSession(base.sessionId)!;
+    expect(rec.reducedUpTo).toBe(8);
+    expect(rec.diagnostics).toHaveLength(5);
+    expect(rec.diagnosticCount).toBe(7);
+    expect(rec.diagnostics.map((diagnostic) => diagnostic.position)).toEqual([2, 3, 4, 5, 6]);
+    expect(rec.diagnostics.every((diagnostic) => diagnostic.eventType === "message.received")).toBe(true);
+    expect(JSON.stringify(rec.reducedState)).toContain("still live");
   });
 });

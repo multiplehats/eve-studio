@@ -10,12 +10,15 @@ import { Streamdown } from "streamdown"
 // raw whitespace-pre text.
 export type ResponseProps = ComponentProps<typeof Streamdown>
 
-export const Response = memo(function Response({ className, ...props }: ResponseProps) {
+export const Response = memo(function Response({
+  className,
+  ...props
+}: ResponseProps) {
   return (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className,
+        className
       )}
       {...props}
     />

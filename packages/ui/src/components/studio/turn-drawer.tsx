@@ -1,7 +1,12 @@
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { turnToMarkdown } from "@/lib/session-markdown"
 import type { Turn } from "@/lib/session-turns"
 import { cn } from "@/lib/utils"
@@ -42,13 +47,15 @@ export function TurnDrawer({
             <SheetHeader className="flex-row items-center gap-2 border-b p-3 pr-12">
               <SheetTitle className="font-mono">{turn.id}</SheetTitle>
               <div className="ml-auto flex items-center gap-1.5">
-                <div className="bg-muted flex rounded-md p-0.5 text-xs">
+                <div className="flex rounded-md bg-muted p-0.5 text-xs">
                   <button
                     type="button"
                     onClick={() => setDetailed(true)}
                     className={cn(
                       "cursor-pointer rounded px-2 py-0.5 transition-colors",
-                      detailed ? "bg-background shadow-sm" : "text-muted-foreground",
+                      detailed
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground"
                     )}
                   >
                     Detailed
@@ -58,13 +65,20 @@ export function TurnDrawer({
                     onClick={() => setDetailed(false)}
                     className={cn(
                       "cursor-pointer rounded px-2 py-0.5 transition-colors",
-                      !detailed ? "bg-background shadow-sm" : "text-muted-foreground",
+                      !detailed
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground"
                     )}
                   >
                     Summarize
                   </button>
                 </div>
-                <Button variant="outline" size="sm" onClick={copy} className="gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copy}
+                  className="gap-1.5"
+                >
                   <HugeiconsIcon
                     icon={copied ? Tick02Icon : Copy01Icon}
                     className="size-3.5"
@@ -77,7 +91,7 @@ export function TurnDrawer({
             </SheetHeader>
 
             <div className="min-h-0 flex-1 overflow-auto p-4">
-              <pre className="text-foreground font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+              <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-foreground">
                 {markdown}
               </pre>
             </div>

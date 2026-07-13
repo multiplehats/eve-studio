@@ -5,9 +5,12 @@ import { ReadOnlyComposer } from "@/components/studio/composer"
 import { MessageList } from "@/components/studio/message-list"
 import { SessionBanners } from "@/components/studio/session-banners"
 import { SessionHeader } from "@/components/studio/session-header"
+import { TranscriptViewport } from "@/components/studio/transcript-viewport"
 import { useHealth, useSession } from "@/lib/studio-queries"
 
-export const Route = createFileRoute("/sessions/$sessionId")({ component: SessionPage })
+export const Route = createFileRoute("/sessions/$sessionId")({
+  component: SessionPage,
+})
 
 function SessionPage() {
   const { sessionId } = Route.useParams()
@@ -15,24 +18,37 @@ function SessionPage() {
   const { data: health } = useHealth()
 
   if (isPending) return <CenterNote text="Loading session…" />
-  if (isError || !data) return <CenterNote text="Session not found. Studio may have restarted since this link was made." />
+  if (isError)
+    return (
+      <CenterNote text="Session not found. Studio may have restarted since this link was made." />
+    )
 
-  const reduced = data.reducerError === undefined ? (data.reducedState as EveMessageData | null) : null
+  const reduced = data.reducedState as EveMessageData | null
 
   return (
     <>
       <SessionHeader summary={data.summary} />
       <div className="flex min-h-0 flex-1 flex-col">
-        <SessionBanners summary={data.summary} reducerError={data.reducerError} studioEveVersion={health?.eveVersion} />
-        <div className="flex-1 overflow-y-auto">
+        <SessionBanners
+          summary={data.summary}
+          diagnostics={data.diagnostics}
+          diagnosticCount={data.diagnosticCount}
+          studioEveVersion={health?.eveVersion}
+        />
+        <TranscriptViewport
+          sessionId={sessionId}
+          contentVersion={data.reducedUpTo}
+        >
           {reduced && reduced.messages.length > 0 ? (
-            <MessageList messages={reduced.messages} events={data.events} />
-          ) : (
-            <CenterNote
-              text={data.reducerError ? "Conversation view unavailable (reducer failed): see banner." : "No conversation yet."}
+            <MessageList
+              sessionId={sessionId}
+              messages={reduced.messages}
+              events={data.events}
             />
+          ) : (
+            <CenterNote text="No conversation yet." />
           )}
-        </div>
+        </TranscriptViewport>
         <div className="shrink-0 px-4 pb-4">
           <ReadOnlyComposer agent={data.summary.agent} />
         </div>
@@ -42,5 +58,9 @@ function SessionPage() {
 }
 
 function CenterNote({ text }: { text: string }) {
-  return <div className="text-muted-foreground flex flex-1 items-center justify-center p-8 text-sm">{text}</div>
+  return (
+    <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+      {text}
+    </div>
+  )
 }

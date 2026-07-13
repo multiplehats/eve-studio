@@ -20,7 +20,9 @@ import { Badge } from "@/components/reui/badge"
 export function PartView({ part }: { part: EveMessagePart }) {
   switch (part.type) {
     case "text":
-      return <Response className="text-sm leading-relaxed">{part.text}</Response>
+      return (
+        <Response className="text-sm leading-relaxed">{part.text}</Response>
+      )
     case "reasoning":
       return (
         <Reasoning isStreaming={part.state === "streaming"} className="w-full">
@@ -38,7 +40,9 @@ export function PartView({ part }: { part: EveMessagePart }) {
           <ToolContent>
             {part.input !== undefined && <ToolInput input={part.input} />}
             {part.output !== undefined && <ToolOutput output={part.output} />}
-            {part.errorText !== undefined && <ToolOutput errorText={part.errorText} />}
+            {part.errorText !== undefined && (
+              <ToolOutput errorText={part.errorText} />
+            )}
           </ToolContent>
         </Tool>
       )
@@ -47,17 +51,25 @@ export function PartView({ part }: { part: EveMessagePart }) {
       return (
         <div className="rounded-md border px-3 py-2 text-sm">
           <span className="font-medium">{part.displayName}</span>{" "}
-          <span className="text-muted-foreground text-xs">authorization {part.state}</span>
+          <span className="text-xs text-muted-foreground">
+            authorization {part.state}
+          </span>
           {part.state === "required" && part.authorization?.url && (
             <p className="mt-1 text-xs break-all">
               {part.authorization.url}
-              {part.authorization.userCode ? ` · code ${part.authorization.userCode}` : ""}
+              {part.authorization.userCode
+                ? ` · code ${part.authorization.userCode}`
+                : ""}
             </p>
           )}
         </div>
       )
     case "file":
-      return <Badge variant="outline" className="w-fit font-mono text-xs">{part.filename ?? part.mediaType}</Badge>
+      return (
+        <Badge variant="outline" className="w-fit font-mono text-xs">
+          {part.filename ?? part.mediaType}
+        </Badge>
+      )
     default:
       return null
   }

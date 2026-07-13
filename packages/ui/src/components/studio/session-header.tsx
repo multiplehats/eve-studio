@@ -15,17 +15,29 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
       />
       <Separator
         orientation="vertical"
-        className="hidden h-5 group-has-data-[collapsible=icon]/sidebar-wrapper:block data-vertical:self-center max-md:block"
+        className="hidden h-5 group-has-data-[collapsible=icon]/sidebar-wrapper:block max-md:block data-vertical:self-center"
       />
-      <span className={`size-2 shrink-0 rounded-full ${meta.dotClass}`} aria-label={meta.label} />
-      <span className="truncate text-sm font-semibold">{summary.agent || "unknown agent"}</span>
-      <span className="text-muted-foreground truncate font-mono text-xs">{shortSessionId(summary.sessionId)}</span>
+      <span
+        className={`size-2 shrink-0 rounded-full ${meta.dotClass}`}
+        aria-label={meta.label}
+      />
+      <span className="truncate text-sm font-semibold">
+        {summary.agent || "unknown agent"}
+      </span>
+      <span className="truncate font-mono text-xs text-muted-foreground">
+        {shortSessionId(summary.sessionId)}
+      </span>
       <Badge variant="outline" className="ml-auto tabular-nums">
-        ↑{formatTokens(summary.usage.inputTokens)} ↓{formatTokens(summary.usage.outputTokens)} tok
+        ↑{formatTokens(summary.usage.inputTokens)} ↓
+        {formatTokens(summary.usage.outputTokens)} tok
       </Badge>
-      <Badge variant="outline" className="tabular-nums">{summary.usage.steps} steps</Badge>
+      <Badge variant="outline" className="tabular-nums">
+        {summary.usage.steps} steps
+      </Badge>
       {summary.usage.costUsd > 0 && (
-        <Badge variant="outline" className="tabular-nums">${summary.usage.costUsd.toFixed(4)}</Badge>
+        <Badge variant="outline" className="tabular-nums">
+          ${summary.usage.costUsd.toFixed(4)}
+        </Badge>
       )}
     </header>
   )

@@ -5,7 +5,12 @@ import { formatDuration, groupTurns } from "./session-turns"
 // Raw events carry the wire timestamp on `event.meta.at`, which isn't in the
 // StoredEvent type — build loosely and cast.
 function ev(type: string, turnId: string, at: string): StoredEvent {
-  return { position: 0, source: "disk", receivedAt: 0, event: { type, data: { turnId }, meta: { at } } } as unknown as StoredEvent
+  return {
+    position: 0,
+    source: "disk",
+    receivedAt: 0,
+    event: { type, data: { turnId }, meta: { at } },
+  } as unknown as StoredEvent
 }
 
 describe("groupTurns", () => {
@@ -17,12 +22,24 @@ describe("groupTurns", () => {
         role: "assistant",
         metadata: { turnId: "turn_0" },
         parts: [
-          { type: "dynamic-tool", toolCallId: "t", toolName: "x", state: "output-available", input: {}, output: 1, stepIndex: 0 },
+          {
+            type: "dynamic-tool",
+            toolCallId: "t",
+            toolName: "x",
+            state: "output-available",
+            input: {},
+            output: 1,
+            stepIndex: 0,
+          },
           { type: "text", text: "done", state: "done", stepIndex: 1 },
         ],
       },
       { id: "u2", role: "user", parts: [{ type: "text", text: "again" }] },
-      { id: "a2", role: "assistant", parts: [{ type: "text", text: "ok", state: "done" }] },
+      {
+        id: "a2",
+        role: "assistant",
+        parts: [{ type: "text", text: "ok", state: "done" }],
+      },
     ] satisfies EveMessage[])
 
     expect(turns).toHaveLength(2)
@@ -37,7 +54,11 @@ describe("groupTurns", () => {
 
   it("handles an assistant message with no preceding user", () => {
     const turns = groupTurns([
-      { id: "a", role: "assistant", parts: [{ type: "text", text: "hi", state: "done" }] },
+      {
+        id: "a",
+        role: "assistant",
+        parts: [{ type: "text", text: "hi", state: "done" }],
+      },
     ] satisfies EveMessage[])
     expect(turns).toHaveLength(1)
     expect(turns[0].user).toBeUndefined()
@@ -47,7 +68,12 @@ describe("groupTurns", () => {
   it("attaches per-turn duration from event meta.at, joined by turnId", () => {
     const messages: EveMessage[] = [
       { id: "u", role: "user", parts: [{ type: "text", text: "hi" }] },
-      { id: "a", role: "assistant", metadata: { turnId: "turn_0" }, parts: [{ type: "text", text: "ok", state: "done" }] },
+      {
+        id: "a",
+        role: "assistant",
+        metadata: { turnId: "turn_0" },
+        parts: [{ type: "text", text: "ok", state: "done" }],
+      },
     ]
     const events = [
       ev("turn.started", "turn_0", "2026-07-11T00:00:00.000Z"),
@@ -60,7 +86,12 @@ describe("groupTurns", () => {
 
   it("falls back to min/max event time when turn.completed is absent", () => {
     const messages: EveMessage[] = [
-      { id: "a", role: "assistant", metadata: { turnId: "turn_0" }, parts: [{ type: "text", text: "x", state: "done" }] },
+      {
+        id: "a",
+        role: "assistant",
+        metadata: { turnId: "turn_0" },
+        parts: [{ type: "text", text: "x", state: "done" }],
+      },
     ]
     const events = [
       ev("turn.started", "turn_0", "2026-07-11T00:00:00.000Z"),

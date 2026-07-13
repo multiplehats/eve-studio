@@ -71,6 +71,14 @@ const homeHtml = await home.text();
 check("uiShellBranded", homeHtml.includes("Eve Studio"));
 const assetPath = homeHtml.match(/(?:src|href)="(\/assets\/[^"]+)"/)?.[1];
 check("uiAssetServed", assetPath !== undefined && (await fetch(`${BASE}${assetPath}`)).ok);
+const directSession = await fetch(`${BASE}/sessions/${encodeURIComponent(s.sessionId)}`);
+const directSessionHtml = await directSession.text();
+check(
+  "directSessionShellBranded",
+  directSession.ok
+    && (directSession.headers.get("content-type") ?? "").includes("text/html")
+    && directSessionHtml.includes("Eve Studio"),
+);
 check("healthEveVersion", (await (await fetch(`${BASE}/health`)).json()).eveVersion === EVE_PIN);
 
 const liveSessionId = s.sessionId;

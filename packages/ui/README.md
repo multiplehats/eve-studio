@@ -13,10 +13,10 @@ Data comes from the collector API: `GET /api/sessions`, `GET /api/sessions/<id>`
 
 ## Development
 
-```bash
+```sh
 pnpm --filter eve-studio build      # once; the dev collector imports its dist
-pnpm dev:collector                  # terminal 1: fixture-replay collector on 43110
-pnpm dev                            # terminal 2: vite on 43120, /api proxied to 43110
+pnpm --filter @eve-studio/ui dev:collector  # terminal 1: fixture collector on 43110
+pnpm --filter @eve-studio/ui dev            # terminal 2: Vite on 43120
 ```
 
 Open http://127.0.0.1:43120. The recorded mock-eval session appears in the

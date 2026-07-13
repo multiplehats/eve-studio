@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { defineHook } from "eve/hooks";
+import { parseStudioPort, projectNameFromRoot, projectRootDigest } from "../lib/config.js";
 import { buildEnvelope, isInert, type EnvelopeState } from "../lib/envelope.js";
 import { Forwarder } from "../lib/forwarder.js";
 
@@ -10,9 +11,9 @@ import { Forwarder } from "../lib/forwarder.js";
 // ephemeral server closes. `session.waiting` is added as a bounded-flush
 // trigger; it is not necessarily a session terminal.
 const FLUSH_EVENTS = new Set(["session.completed", "session.failed", "result.completed", "session.waiting"]);
-const INERT = isInert(process.env);
-const url = `http://127.0.0.1:${process.env.EVE_STUDIO_PORT ?? "43110"}`;
-const forwarder = new Forwarder({ url });
+const port = parseStudioPort(process.env.EVE_STUDIO_PORT);
+const forwarder = port === undefined ? undefined : new Forwarder({ url: `http://127.0.0.1:${port}` });
+const INERT = isInert(process.env) || forwarder === undefined;
 const state: EnvelopeState = {
   counters: new Map(),
   hookEpoch: randomUUID(),
@@ -28,14 +29,14 @@ const state: EnvelopeState = {
 function safeProjectName(): string {
   try {
     // cwd of the compiled agent process is the agent project root
-    return process.env.npm_package_name ?? process.cwd().split("/").at(-1) ?? "unknown";
+    return process.env.npm_package_name ?? projectNameFromRoot(process.cwd());
   } catch {
     return "unknown";
   }
 }
 function safeRootHash(): string {
   try {
-    return Buffer.from(process.cwd()).toString("base64url").slice(0, 12);
+    return projectRootDigest(process.cwd());
   } catch {
     return "unknown";
   }
@@ -44,7 +45,7 @@ function safeRootHash(): string {
 export default defineHook({
   events: {
     "*": async (event, ctx) => {
-      if (INERT) return;
+      if (INERT || !forwarder) return;
       try {
         forwarder.push(buildEnvelope(event as { type: string; data?: unknown }, ctx, state));
         if (FLUSH_EVENTS.has((event as { type: string }).type)) {

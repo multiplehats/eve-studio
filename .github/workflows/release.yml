@@ -16,6 +16,7 @@ permissions:
 jobs:
   version-plan:
     name: Build version patch
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -50,6 +51,11 @@ jobs:
       - name: Decide whether version PR is needed
         id: decide
         run: |
+          for changelog in packages/studio/CHANGELOG.md packages/extension/CHANGELOG.md; do
+            if [ -e "$changelog" ]; then
+              git add --intent-to-add "$changelog"
+            fi
+          done
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
@@ -68,7 +74,7 @@ jobs:
   version-pr:
     name: Open version PR
     needs: version-plan
-    if: needs.version-plan.outputs.has_changes == 'true'
+    if: github.ref == 'refs/heads/main' && needs.version-plan.outputs.has_changes == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -114,7 +120,7 @@ jobs:
   build-pack:
     name: Build and pack release
     needs: version-plan
-    if: needs.version-plan.outputs.has_changes == 'false'
+    if: github.ref == 'refs/heads/main' && needs.version-plan.outputs.has_changes == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -152,6 +158,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Smoke Studio
+        run: pnpm smoke:studio
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke browser
+        run: pnpm smoke:browser
+
       - name: Pack and inspect release tarballs
         run: pnpm check:release-artifacts
 
@@ -170,11 +185,14 @@ jobs:
             case "$tarball" in
               *.tgz)
                 spec="$(tar -xOf "release-artifacts/$tarball" package/package.json | node -e 'let source=""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (chunk) => { source += chunk; }); process.stdin.on("end", () => { const manifest = JSON.parse(source); if (typeof manifest.name !== "string" || typeof manifest.version !== "string") process.exit(1); process.stdout.write(manifest.name + "@" + manifest.version); });')"
-                if npm view "$spec" version >/dev/null 2>&1; then
+                if lookup="$(npm view "$spec" version --json 2>&1)"; then
                   echo "$spec is already published; skipping"
-                else
+                elif printf '%s\n' "$lookup" | grep -Eq '"code"[[:space:]]*:[[:space:]]*"E404"'; then
                   printf '%s  %s\n' "$checksum" "$tarball" >> publish-artifacts/SHA256SUMS
                   cp "release-artifacts/$tarball" "publish-artifacts/$tarball"
+                else
+                  printf '%s\n' "$lookup" >&2
+                  exit 1
                 fi
                 ;;
               *)
@@ -200,7 +218,7 @@ jobs:
   publish:
     name: Publish
     needs: build-pack
-    if: needs.build-pack.outputs.has_publishable_tarballs == 'true'
+    if: github.ref == 'refs/heads/main' && needs.build-pack.outputs.has_publishable_tarballs == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm-publish

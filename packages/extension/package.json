@@ -2,8 +2,20 @@
   "name": "@eve-studio/extension",
   "version": "0.1.1",
   "type": "module",
-  "description": "Eve extension that forwards local agent session events to eve-studio",
+  "description": "Capture extension for eve-studio. Streams local eve session events to the Studio collector for live, read-only inspection.",
   "license": "MIT",
+  "author": {
+    "name": "Chris Jayden",
+    "url": "https://x.com/itschrisjayden"
+  },
+  "keywords": [
+    "eve",
+    "ai-agents",
+    "agent-observability",
+    "agent-debugging",
+    "extension",
+    "telemetry"
+  ],
   "homepage": "https://github.com/multiplehats/eve-studio#readme",
   "bugs": {
     "url": "https://github.com/multiplehats/eve-studio/issues"
@@ -25,7 +37,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "eve": ">=0.22.3 <1"
+    "eve": ">=0.22.3 <0.23.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

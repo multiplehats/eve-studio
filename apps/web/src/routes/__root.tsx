@@ -10,6 +10,8 @@ import appCss from "../styles.css?url"
 const TITLE = "eve-studio: Watch your agent work"
 const DESCRIPTION =
   "One command mounts a live observability workspace beside your eve agent, showing sessions, messages, tool calls, and usage, streamed to your browser."
+const SITE_URL = "https://eve-studio-tau.vercel.app"
+const SOCIAL_IMAGE = `${SITE_URL}/og-image.jpg`
 
 export const Route = createRootRoute({
   head: () => ({
@@ -22,12 +24,29 @@ export const Route = createRootRoute({
       { property: "og:title", content: TITLE },
       { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:site_name", content: "eve-studio" },
+      { property: "og:url", content: SITE_URL },
+      { property: "og:image", content: SOCIAL_IMAGE },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Eve Studio showing a captured agent session",
+      },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:creator", content: "@itschrisjayden" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
+      { name: "twitter:image", content: SOCIAL_IMAGE },
+      {
+        name: "twitter:image:alt",
+        content: "Eve Studio showing a captured agent session",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "canonical", href: SITE_URL },
     ],
   }),
   component: () => <Outlet />,

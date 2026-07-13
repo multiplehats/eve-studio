@@ -12,6 +12,7 @@ discuss a change before opening a pull request, reach out to
 
 This repository is a pnpm workspace.
 
+- Development requires Node.js 24 or newer and pnpm 10.33.4.
 - We use [pnpm](https://pnpm.io) and workspaces for package management.
 - The root package contains shared scripts for testing, typechecking, building,
   and smoke testing.
@@ -27,7 +28,8 @@ packages/
 `-- ui/          # private browser UI bundled into the studio package
 
 apps/
-`-- demo-agent/  # local eve agent fixture for smoke testing
+|-- demo-agent/  # local eve agent fixture for smoke testing
+`-- web/         # project landing page
 ```
 
 | Path | Description |
@@ -36,6 +38,7 @@ apps/
 | `packages/extension` | The `@eve-studio/extension` package mounted into eve projects. |
 | `packages/ui` | The private React/TanStack browser UI served by the collector. |
 | `apps/demo-agent` | A local eve project used for development and smoke testing. |
+| `apps/web` | The public project landing page. |
 
 ## Development
 
@@ -108,6 +111,8 @@ When opening a pull request:
 Useful root checks:
 
 ```sh
+pnpm lint
+pnpm format:check
 pnpm test
 pnpm typecheck
 pnpm smoke:studio
@@ -135,6 +140,30 @@ Do not manually edit package versions or changelog sections. The release workflo
 
 Publishing uses npm Trusted Publishing through GitHub OIDC. Do not add npm tokens to this repository.
 
+Configure the same GitHub Actions trusted publisher in the npm settings for
+both `eve-studio` and `@eve-studio/extension`:
+
+| npm field            | Value          |
+| -------------------- | -------------- |
+| Organization or user | `multiplehats` |
+| Repository           | `eve-studio`   |
+| Workflow filename    | `release.yml`  |
+| Environment name     | `npm-publish`  |
+| Allowed actions      | `npm publish`  |
+
+`eve-studio` intentionally remains unscoped so the primary command stays
+`npx eve-studio`; the extension uses the `@eve-studio` organization scope.
+Unscoped package owners are npm user accounts, so a personal maintainer in its
+owner list is expected. Audit registry access before a release with:
+
+```sh
+npm owner ls eve-studio
+npm access list collaborators @eve-studio/extension
+```
+
+Add another npm user with `npm owner add <user> eve-studio` only when a second
+human maintainer needs release access.
+
 ## Commit convention
 
 Use clear, conventional commit messages when possible:
@@ -151,5 +180,5 @@ and `chore`.
 
 ## Security
 
-Please do not open public issues for security vulnerabilities. Report sensitive
-findings privately to [@itschrisjayden](https://x.com/itschrisjayden).
+Please do not open public issues for security vulnerabilities. Follow the
+[security policy](SECURITY.md) to report them privately.

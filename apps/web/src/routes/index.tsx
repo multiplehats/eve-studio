@@ -29,7 +29,7 @@ function SplashPage() {
         </div>
 
         <p
-          className="rise text-[11px] uppercase tracking-[0.22em] text-faint"
+          className="rise text-faint text-[11px] tracking-[0.22em] uppercase"
           style={{ "--rise-delay": "0.08s" } as React.CSSProperties}
         >
           Observability for eve agents
@@ -40,7 +40,7 @@ function SplashPage() {
           style={{ "--rise-delay": "0.18s" } as React.CSSProperties}
         >
           <h1
-            className="shimmer shimmer-duration-2500 max-w-4xl text-balance text-[clamp(2.625rem,8.5vw,4.75rem)] font-medium leading-[1.04] tracking-[-0.04em] text-[#8a8a8a]"
+            className="max-w-4xl shimmer text-[clamp(2.625rem,8.5vw,4.75rem)] leading-[1.04] font-medium tracking-[-0.04em] text-balance text-[#8a8a8a] shimmer-duration-2500"
             style={{ "--shimmer-color": "#ffffff" } as React.CSSProperties}
           >
             Watch your agent work.
@@ -48,7 +48,7 @@ function SplashPage() {
         </div>
 
         <p
-          className="rise max-w-[34rem] text-pretty text-[15px] leading-relaxed text-muted sm:text-base"
+          className="rise max-w-[34rem] text-[15px] leading-relaxed text-pretty text-muted sm:text-base"
           style={{ "--rise-delay": "0.28s" } as React.CSSProperties}
         >
           One command mounts a live workspace beside your eve project. Sessions,
@@ -62,7 +62,10 @@ function SplashPage() {
         >
           <InstallCommand />
 
-          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-faint">
+          <nav
+            aria-label="Project links"
+            className="text-faint flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px]"
+          >
             <FooterLink href={LINKS.docs}>Read the docs</FooterLink>
             <FooterLink href={LINKS.github}>GitHub</FooterLink>
             <FooterLink href={LINKS.eve}>eve</FooterLink>
@@ -71,14 +74,20 @@ function SplashPage() {
         </div>
       </main>
 
-      <footer className="relative z-10 flex h-14 items-center justify-center text-[12px] text-faint">
+      <footer className="text-faint relative z-10 flex h-14 items-center justify-center text-[12px]">
         MIT License
       </footer>
     </div>
   )
 }
 
-function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+function FooterLink({
+  href,
+  children,
+}: {
+  href: string
+  children: React.ReactNode
+}) {
   return (
     <a
       href={href}

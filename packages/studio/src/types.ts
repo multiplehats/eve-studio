@@ -11,6 +11,7 @@ export interface IngestEnvelope {           // tolerant view of Envelope v1; v/p
   event: { type: string; data?: unknown };
 }
 export interface StoredEvent { position: number; source: "live" | "disk"; receivedAt: number; event: { type: string; data?: unknown } }
+export interface ProjectionDiagnostic { position: number; eventType: string; message: string }
 export type SessionStatus = "working" | "waiting" | "completed" | "failed";
 export interface SessionUsage { inputTokens: number; outputTokens: number; costUsd: number; steps: number }
 export interface SessionSummary {
@@ -26,14 +27,15 @@ export interface SessionSummary {
   updatedAt: number;
 }
 export type RegistryUpdate =
-  | { kind: "event"; sessionId: string; position: number; event: { type: string; data?: unknown } }
-  | { kind: "session"; session: SessionSummary };
-export interface RegistryOptions { maxSessionBytes?: number; now?: () => number; rebaseAfterMs?: number }   // default cap 5_000_000; default rebaseAfterMs 3_000
+  | { kind: "event"; sessionId: string; position: number }
+  | { kind: "session"; session: SessionSummary }
+  | { kind: "session-removed"; sessionId: string };
+export interface RegistryOptions { maxSessionBytes?: number; maxSessions?: number; now?: () => number; rebaseAfterMs?: number }   // default caps 5_000_000 bytes / 200 sessions; default rebaseAfterMs 3_000
 export interface Registry {
   ingest(raw: unknown): void;                              // live path: tolerant, never throws
   ingestDisk(sessionId: string, events: Array<{ position: number; event: { type: string; data?: unknown } }>, meta?: { agent?: string; project?: { name: string; root: string } }): void;
   getSessions(): SessionSummary[];
-  getSession(id: string): { summary: SessionSummary; events: StoredEvent[]; reducedState: unknown; reducedUpTo: number; reducerError?: string } | undefined;
+  getSession(id: string): { summary: SessionSummary; events: StoredEvent[]; reducedState: unknown; reducedUpTo: number; diagnostics: ProjectionDiagnostic[]; diagnosticCount: number } | undefined;
   subscribe(fn: (u: RegistryUpdate) => void): () => void;
   stats(): { sessions: number; eventsAccepted: number; duplicatesDropped: number; malformedSkipped: number };
 }

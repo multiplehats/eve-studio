@@ -12,7 +12,9 @@ import { readFileSync, rmSync } from "node:fs";
 import { once } from "node:events";
 
 const CFILE = "/tmp/eve-studio-smoke-capture.ndjson";
+const DEMO = new URL("../apps/demo-agent", import.meta.url).pathname;
 rmSync(CFILE, { force: true });
+rmSync(`${DEMO}/.workflow-data`, { recursive: true, force: true });
 
 const collector = spawn("node", ["scripts/m0/collector.mjs"], {
   env: { ...process.env, M0_COLLECTOR_FILE: CFILE },
@@ -20,9 +22,20 @@ const collector = spawn("node", ["scripts/m0/collector.mjs"], {
 });
 await new Promise((r) => setTimeout(r, 500));
 
-const evalRun = spawn("pnpm", ["exec", "eve", "eval", "m0-probe", "--verbose"], {
-  cwd: new URL("../apps/demo-agent", import.meta.url).pathname,
-  env: { ...process.env, EVE_STUDIO_PORT: "43118" },
+const evalEnv = { ...process.env, EVE_STUDIO_MOCK: "1" };
+for (const key of [
+  "OPENROUTER_API_KEY",
+  "DEMO_MODEL",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "AI_GATEWAY_API_KEY",
+]) {
+  delete evalEnv[key];
+}
+
+const evalRun = spawn("pnpm", ["exec", "eve", "eval", "mock-probe", "--verbose"], {
+  cwd: DEMO,
+  env: { ...evalEnv, EVE_STUDIO_PORT: "43118" },
   stdio: "inherit",
 });
 const [code] = await once(evalRun, "exit");

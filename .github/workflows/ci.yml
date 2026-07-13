@@ -46,17 +46,32 @@ jobs:
         if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != 'multiplehats/eve-studio')
         run: pnpm check:changesets
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
       - name: Test
         run: pnpm test
 
       - name: Build release artifacts
         run: pnpm build:release
 
+      - name: Build marketing site
+        run: pnpm --filter @eve-studio/web build
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Smoke Studio
         run: pnpm smoke:studio
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke browser
+        run: pnpm smoke:browser
 
       - name: Check release artifacts
         run: pnpm check:release-artifacts

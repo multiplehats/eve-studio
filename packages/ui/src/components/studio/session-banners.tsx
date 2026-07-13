@@ -1,31 +1,62 @@
-import type { SessionSummary } from "eve-studio"
+import type { ProjectionDiagnostic, SessionSummary } from "eve-studio"
 
-interface Banner { key: string; tone: "warn" | "error"; text: string }
+interface Banner {
+  key: string
+  tone: "warn" | "error"
+  text: string
+}
 
 export function SessionBanners({
   summary,
-  reducerError,
+  diagnostics = [],
+  diagnosticCount = diagnostics.length,
   studioEveVersion,
 }: {
   summary: SessionSummary
-  reducerError?: string
+  diagnostics?: readonly ProjectionDiagnostic[]
+  diagnosticCount?: number
   studioEveVersion?: string
 }) {
   const banners: Banner[] = []
   if (summary.degraded === "epoch-reset") {
-    banners.push({ key: "degraded", tone: "warn", text: "Hooks were re-registered mid-session (epoch reset) — event ordering after the reset is best-effort." })
+    banners.push({
+      key: "degraded",
+      tone: "warn",
+      text: "Hooks were re-registered mid-session (epoch reset) — event ordering after the reset is best-effort.",
+    })
   }
   if (summary.degraded === "gap") {
-    banners.push({ key: "degraded", tone: "warn", text: "Some earlier events never arrived — the conversation resumes from the first captured point." })
+    banners.push({
+      key: "degraded",
+      tone: "warn",
+      text: "Some earlier events never arrived — the conversation resumes from the first captured point.",
+    })
   }
   if (summary.evictedBelow > 0) {
-    banners.push({ key: "evicted", tone: "warn", text: `Raw events before position ${summary.evictedBelow} were evicted under the memory cap (reduced text is kept).` })
+    banners.push({
+      key: "evicted",
+      tone: "warn",
+      text: `Raw events before position ${summary.evictedBelow} were evicted under the memory cap (reduced text is kept).`,
+    })
   }
-  if (reducerError !== undefined) {
-    banners.push({ key: "reducer", tone: "error", text: `Conversation reducer failed: ${reducerError}. Raw events are still being captured.` })
+  if (diagnostics.length > 0) {
+    const latest = diagnostics[diagnostics.length - 1]
+    banners.push({
+      key: "projection",
+      tone: "warn",
+      text: `Studio skipped ${diagnosticCount} ${diagnosticCount === 1 ? "event" : "events"} while building this conversation. Latest: ${latest.eventType} at ${latest.position} — ${latest.message}`,
+    })
   }
-  if (studioEveVersion && summary.eveVersion && summary.eveVersion !== studioEveVersion) {
-    banners.push({ key: "version", tone: "warn", text: `Agent runs eve ${summary.eveVersion}; Studio bundles eve ${studioEveVersion} — the conversation view may miss newer event shapes.` })
+  if (
+    studioEveVersion &&
+    summary.eveVersion &&
+    summary.eveVersion !== studioEveVersion
+  ) {
+    banners.push({
+      key: "version",
+      tone: "warn",
+      text: `Agent runs eve ${summary.eveVersion}; Studio bundles eve ${studioEveVersion} — the conversation view may miss newer event shapes.`,
+    })
   }
   if (banners.length === 0) return null
   return (

@@ -1,5 +1,6 @@
 import type { EveMessagePart } from "eve-studio"
-import { formatDuration, type Turn } from "./session-turns"
+import { formatDuration } from "./session-turns"
+import type { Turn } from "./session-turns"
 
 // Renders a single agent turn as agent-ready markdown — the transcript users
 // copy out of the turn drawer and hand to their own agents. Mirrors the shape
@@ -41,7 +42,10 @@ function inputLine(part: EveMessagePart): string | null {
   }
 }
 
-export function turnToMarkdown(turn: Turn, opts: { detailed?: boolean } = {}): string {
+export function turnToMarkdown(
+  turn: Turn,
+  opts: { detailed?: boolean } = {}
+): string {
   const detailed = opts.detailed ?? true
   const out: string[] = []
 
@@ -49,9 +53,12 @@ export function turnToMarkdown(turn: Turn, opts: { detailed?: boolean } = {}): s
   out.push(`ID: ${turn.id}`)
 
   const meta: string[] = []
-  if (turn.startedAt !== undefined) meta.push(`Start Time: ${new Date(turn.startedAt).toISOString()}`)
-  if (turn.endedAt !== undefined) meta.push(`End Time: ${new Date(turn.endedAt).toISOString()}`)
-  if (turn.durationMs !== undefined) meta.push(`Duration: ${formatDuration(turn.durationMs)}`)
+  if (turn.startedAt !== undefined)
+    meta.push(`Start Time: ${new Date(turn.startedAt).toISOString()}`)
+  if (turn.endedAt !== undefined)
+    meta.push(`End Time: ${new Date(turn.endedAt).toISOString()}`)
+  if (turn.durationMs !== undefined)
+    meta.push(`Duration: ${formatDuration(turn.durationMs)}`)
   if (turn.toolCount > 0) meta.push(`Tools: ${turn.toolCount}`)
   if (turn.stepCount > 0) meta.push(`Steps: ${turn.stepCount}`)
   if (meta.length > 0) {
@@ -80,9 +87,12 @@ export function turnToMarkdown(turn: Turn, opts: { detailed?: boolean } = {}): s
         out.push("")
         out.push(`### ${name} → ${state}`)
         if (detailed) {
-          if (part.input !== undefined) out.push(`Input: ${fmtValue(part.input)}`)
-          if (part.output !== undefined) out.push(`Output: ${fmtValue(part.output)}`)
-          if (part.errorText !== undefined) out.push(`Output: ${part.errorText}`)
+          if (part.input !== undefined)
+            out.push(`Input: ${fmtValue(part.input)}`)
+          if (part.output !== undefined)
+            out.push(`Output: ${fmtValue(part.output)}`)
+          if (part.errorText !== undefined)
+            out.push(`Output: ${part.errorText}`)
         } else if (part.errorText !== undefined) {
           out.push(`Error: ${part.errorText}`)
         }

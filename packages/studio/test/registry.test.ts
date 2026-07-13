@@ -128,6 +128,28 @@ describe("grouping and usage", () => {
 });
 
 describe("byte-cap eviction", () => {
+  it("evicts a sole oversized raw event after reducing it", () => {
+    const r = createRegistry({ maxSessionBytes: 10 });
+    r.ingest(env("s", 0, "message.appended", {
+      event: {
+        type: "message.appended",
+        data: {
+          messageDelta: "projected text survives raw eviction",
+          turnId: "turn-1",
+          stepIndex: 0,
+          sequence: 0,
+        },
+      },
+    }));
+
+    const rec = r.getSession("s")!;
+    expect(rec.events).toEqual([]);
+    expect(rec.summary.eventCount).toBe(0);
+    expect(rec.summary.evictedBelow).toBe(1);
+    expect(rec.reducedUpTo).toBe(1);
+    expect(JSON.stringify(rec.reducedState)).toContain("projected text survives raw eviction");
+  });
+
   it("evicts oldest raw events past the cap and records evictedBelow", () => {
     const r = createRegistry({ maxSessionBytes: 2_000 });
     const big = "x".repeat(500);
@@ -137,6 +159,20 @@ describe("byte-cap eviction", () => {
     expect(rec.events[0].position).toBe(rec.summary.evictedBelow);
     expect(rec.summary.eventCount).toBe(rec.events.length);
     expect(rec.summary.maxPosition).toBe(9);
+  });
+
+  it("accounts for UTF-8 bytes instead of JavaScript string length", () => {
+    const first = { type: "custom", data: { value: "😀" } };
+    const second = { type: "custom", data: { value: "😀" } };
+    const codeUnitBytes = JSON.stringify(first).length + JSON.stringify(second).length;
+    const utf8Bytes = Buffer.byteLength(JSON.stringify(first), "utf8") + Buffer.byteLength(JSON.stringify(second), "utf8");
+    expect(utf8Bytes).toBeGreaterThan(codeUnitBytes);
+    const r = createRegistry({ maxSessionBytes: codeUnitBytes });
+
+    r.ingest(env("s", 0, "custom", { event: first }));
+    r.ingest(env("s", 1, "custom", { event: second }));
+
+    expect(r.getSession("s")!.events.map((event) => event.position)).toEqual([1]);
   });
 });
 
@@ -151,6 +187,45 @@ describe("subscribe", () => {
     off();
     r.ingest(env("s", 1, "x"));
     expect(seen.length).toBe(2);
+  });
+
+  it("omits raw event bodies from event notifications", () => {
+    const r = createRegistry();
+    const updates: unknown[] = [];
+    r.subscribe((update) => updates.push(update));
+
+    r.ingest(env("s", 0, "secret.event", { event: { type: "secret.event", data: { secret: "do-not-stream" } } }));
+
+    expect(updates[0]).toEqual({ kind: "event", sessionId: "s", position: 0 });
+    expect(updates[0]).not.toHaveProperty("event");
+  });
+});
+
+describe("session-count cap", () => {
+  it("evicts the oldest terminal session first and emits session-removed", () => {
+    let clock = 0;
+    const r = createRegistry({ maxSessions: 2, now: () => ++clock });
+    const updates: unknown[] = [];
+    r.subscribe((update) => updates.push(update));
+    r.ingest(env("terminal", 0, "session.completed"));
+    r.ingest(env("working", 0, "session.started"));
+
+    r.ingest(env("new", 0, "session.started"));
+
+    expect(r.getSessions().map((session) => session.sessionId).sort()).toEqual(["new", "working"]);
+    expect(updates).toContainEqual({ kind: "session-removed", sessionId: "terminal" });
+    expect(r.stats().sessions).toBe(2);
+  });
+
+  it("evicts the oldest session when none are terminal", () => {
+    let clock = 0;
+    const r = createRegistry({ maxSessions: 2, now: () => ++clock });
+    r.ingest(env("oldest", 0, "session.started"));
+    r.ingest(env("newer", 0, "session.started"));
+
+    r.ingest(env("newest", 0, "session.started"));
+
+    expect(r.getSessions().map((session) => session.sessionId).sort()).toEqual(["newer", "newest"]);
   });
 });
 
