@@ -8,14 +8,20 @@ const packages = [
   {
     dir: "packages/studio",
     name: "eve-studio",
-    requiredFiles: ["dist/cli.js", "dist/index.js", "dist/index.d.ts", "dist/ui/_shell.html"],
+    description: "Local observability workspace for eve agents. Inspect live sessions, messages, tool calls, steps, and usage in your browser.",
+    repositoryDirectory: "packages/studio",
+    requiredFiles: ["README.md", "LICENSE", "dist/cli.js", "dist/index.js", "dist/index.d.ts", "dist/ui/_shell.html"],
     executableFiles: ["dist/cli.js"],
     shebangFiles: ["dist/cli.js"],
   },
   {
     dir: "packages/extension",
     name: "@eve-studio/extension",
+    description: "Capture extension for eve-studio. Streams local eve session events to the Studio collector for live, read-only inspection.",
+    repositoryDirectory: "packages/extension",
     requiredFiles: [
+      "README.md",
+      "LICENSE",
       "dist/index.mjs",
       "dist/index.d.ts",
       "dist/tools/index.mjs",
@@ -54,6 +60,17 @@ const sums = [];
 for (const pkg of packages) {
   const packageJson = readFileSync(join(pkg.dir, "package.json"), "utf8");
   assert(!packageJson.includes("workspace:"), `${pkg.name} package.json contains forbidden workspace: reference`);
+  const manifest = JSON.parse(packageJson);
+  assert(manifest.name === pkg.name, `${pkg.name} manifest name does not match`);
+  assert(manifest.description === pkg.description, `${pkg.name} description is not the approved package copy`);
+  assert(manifest.license === "MIT", `${pkg.name} must declare MIT`);
+  assert(manifest.author?.name === "Chris Jayden", `${pkg.name} is missing its author name`);
+  assert(typeof manifest.author?.url === "string" && manifest.author.url.length > 0, `${pkg.name} is missing its author URL`);
+  assert(Array.isArray(manifest.keywords) && manifest.keywords.length >= 4, `${pkg.name} needs focused npm keywords`);
+  assert(manifest.repository?.directory === pkg.repositoryDirectory, `${pkg.name} repository directory is wrong`);
+  assert(typeof manifest.bugs?.url === "string" && manifest.bugs.url.length > 0, `${pkg.name} is missing its issue URL`);
+  assert(manifest.publishConfig?.access === "public", `${pkg.name} must publish publicly`);
+  assert(manifest.publishConfig?.provenance === true, `${pkg.name} must publish with provenance`);
 
   for (const required of pkg.requiredFiles) {
     assert(existsSync(join(pkg.dir, required)), `${pkg.name} missing built file ${required}`);

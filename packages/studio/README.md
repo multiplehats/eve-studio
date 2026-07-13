@@ -1,9 +1,12 @@
 # eve-studio
 
-Zero-config observability for [Eve](https://eve.dev) agents. Run it from your
-agent project (or point it at one) and it captures live session events
-(messages, steps, tool calls, usage) into an in-memory registry served over
-HTTP, no setup beyond mounting one extension.
+Local observability workspace for [eve](https://eve.dev) agents. Inspect live
+sessions, messages, tool calls, steps, and usage in your browser.
+
+## Requirements
+
+- Node.js 24 or newer
+- A stable eve release in `>=0.22.3 <0.23.0`
 
 ## Usage
 
@@ -14,6 +17,10 @@ npx eve-studio
 Resolves the Eve project in the current directory (or prompts if there are
 several), checks the installed `eve` version, offers to mount the Studio
 capture extension if it isn't mounted yet, then starts the server.
+
+The mount prompt never overwrites an existing `agent/extensions/studio.ts`.
+If that path already contains other code, Studio leaves it alone and prints the
+manual setup.
 
 ## Flags
 
@@ -39,6 +46,9 @@ The CLI starts the capture server and prints where to find the raw session
 snapshot (`GET /api/sessions`) and the live event stream. See "Browser UI"
 below for the SPA that ships alongside it.
 
+The server binds only to `127.0.0.1`. Captured data stays in the collector's
+in-memory registry and is not uploaded by eve-studio.
+
 ## Browser UI
 
 When `dist/ui/_shell.html` exists (produced by the root `pnpm build:studio`),
@@ -47,3 +57,9 @@ same process, same port, no CORS. Without it, eve-studio runs API-only and says
 so at startup. `/health` reports `studioVersion` and `eveVersion` (the eve this
 package bundles for reduction); the UI banners any session whose agent-side eve
 differs.
+
+## Support
+
+- [Documentation and source](https://github.com/multiplehats/eve-studio)
+- [Issue tracker](https://github.com/multiplehats/eve-studio/issues)
+- [Security policy](https://github.com/multiplehats/eve-studio/security/policy)

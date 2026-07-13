@@ -2,8 +2,20 @@
   "name": "eve-studio",
   "version": "0.1.0",
   "type": "module",
-  "description": "Zero-config observability UI for Eve agents",
+  "description": "Local observability workspace for eve agents. Inspect live sessions, messages, tool calls, steps, and usage in your browser.",
   "license": "MIT",
+  "author": {
+    "name": "Chris Jayden",
+    "url": "https://x.com/itschrisjayden"
+  },
+  "keywords": [
+    "eve",
+    "ai-agents",
+    "agent-observability",
+    "agent-debugging",
+    "developer-tools",
+    "cli"
+  ],
   "homepage": "https://github.com/multiplehats/eve-studio#readme",
   "bugs": {
     "url": "https://github.com/multiplehats/eve-studio/issues"
