@@ -89,7 +89,9 @@ export const Reasoning = memo(function Reasoning({
   }, [isStreaming, isOpen, defaultOpen, setIsOpen, hasAutoClosed])
 
   return (
-    <ReasoningContext.Provider value={{ isStreaming, isOpen, setIsOpen, duration }}>
+    <ReasoningContext.Provider
+      value={{ isStreaming, isOpen, setIsOpen, duration }}
+    >
       <Collapsible
         className={cn("not-prose", className)}
         onOpenChange={setIsOpen}
@@ -102,7 +104,9 @@ export const Reasoning = memo(function Reasoning({
   )
 })
 
-export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
+export type ReasoningTriggerProps = ComponentProps<
+  typeof CollapsibleTrigger
+> & {
   getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode
 }
 
@@ -124,18 +128,26 @@ export const ReasoningTrigger = memo(function ReasoningTrigger({
   return (
     <CollapsibleTrigger
       className={cn(
-        "text-muted-foreground hover:text-foreground flex items-center gap-2 text-xs font-medium transition-colors select-none",
-        className,
+        "flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors select-none hover:text-foreground",
+        className
       )}
       {...props}
     >
       {children ?? (
         <>
-          <HugeiconsIcon icon={AiBrain01Icon} className="size-4" strokeWidth={2} aria-hidden="true" />
+          <HugeiconsIcon
+            icon={AiBrain01Icon}
+            className="size-4"
+            strokeWidth={2}
+            aria-hidden="true"
+          />
           {getThinkingMessage(isStreaming, duration)}
           <HugeiconsIcon
             icon={ArrowDown01Icon}
-            className={cn("size-4 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
+            className={cn(
+              "size-4 transition-transform",
+              isOpen ? "rotate-180" : "rotate-0"
+            )}
             strokeWidth={2}
             aria-hidden="true"
           />
@@ -157,7 +169,10 @@ export const ReasoningContent = memo(function ReasoningContent({
 }: ReasoningContentProps) {
   return (
     <CollapsibleContent
-      className={cn("text-muted-foreground mt-2 border-l-2 pl-3 text-sm", className)}
+      className={cn(
+        "mt-2 border-l-2 pl-3 text-sm text-muted-foreground",
+        className
+      )}
       {...props}
     >
       <Response>{children}</Response>

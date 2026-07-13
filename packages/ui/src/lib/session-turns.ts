@@ -22,8 +22,17 @@ function eventAt(event: { type: string; data?: unknown }): number | undefined {
   return Number.isFinite(ms) ? ms : undefined
 }
 
-interface RawTiming { startedAt?: number; endedAt?: number; minAt?: number; maxAt?: number }
-export interface TurnTiming { startedAt?: number; endedAt?: number; durationMs?: number }
+interface RawTiming {
+  startedAt?: number
+  endedAt?: number
+  minAt?: number
+  maxAt?: number
+}
+export interface TurnTiming {
+  startedAt?: number
+  endedAt?: number
+  durationMs?: number
+}
 
 /**
  * Per-turn wall-clock timing, keyed by `turnId`, derived from each raw event's
@@ -31,7 +40,9 @@ export interface TurnTiming { startedAt?: number; endedAt?: number; durationMs?:
  * to the min/max event time so an in-flight or boundary-less turn still gets a
  * best-effort duration.
  */
-export function computeTurnTimings(events: readonly StoredEvent[]): Map<string, TurnTiming> {
+export function computeTurnTimings(
+  events: readonly StoredEvent[]
+): Map<string, TurnTiming> {
   const raw = new Map<string, RawTiming>()
   for (const stored of events) {
     const { event } = stored
@@ -41,7 +52,8 @@ export function computeTurnTimings(events: readonly StoredEvent[]): Map<string, 
     if (at === undefined) continue
     const t = raw.get(turnId) ?? {}
     if (event.type === "turn.started") t.startedAt = at
-    else if (event.type === "turn.completed" || event.type === "turn.failed") t.endedAt = at
+    else if (event.type === "turn.completed" || event.type === "turn.failed")
+      t.endedAt = at
     t.minAt = t.minAt === undefined ? at : Math.min(t.minAt, at)
     t.maxAt = t.maxAt === undefined ? at : Math.max(t.maxAt, at)
     raw.set(turnId, t)
@@ -51,7 +63,9 @@ export function computeTurnTimings(events: readonly StoredEvent[]): Map<string, 
     const startedAt = t.startedAt ?? t.minAt
     const endedAt = t.endedAt ?? t.maxAt
     const durationMs =
-      startedAt !== undefined && endedAt !== undefined ? endedAt - startedAt : undefined
+      startedAt !== undefined && endedAt !== undefined
+        ? endedAt - startedAt
+        : undefined
     out.set(id, { startedAt, endedAt, durationMs })
   }
   return out
@@ -75,18 +89,30 @@ export function formatDuration(ms: number): string {
  */
 export function groupTurns(
   messages: readonly EveMessage[],
-  events: readonly StoredEvent[] = [],
+  events: readonly StoredEvent[] = []
 ): Turn[] {
   const turns: Turn[] = []
 
   for (const message of messages) {
-    const last = turns[turns.length - 1]
+    const last = turns.at(-1)
     if (message.role === "user") {
-      turns.push({ id: "", index: turns.length, user: message, toolCount: 0, stepCount: 0 })
+      turns.push({
+        id: "",
+        index: turns.length,
+        user: message,
+        toolCount: 0,
+        stepCount: 0,
+      })
     } else if (last && last.assistant === undefined) {
       last.assistant = message
     } else {
-      turns.push({ id: "", index: turns.length, assistant: message, toolCount: 0, stepCount: 0 })
+      turns.push({
+        id: "",
+        index: turns.length,
+        assistant: message,
+        toolCount: 0,
+        stepCount: 0,
+      })
     }
   }
 
@@ -99,7 +125,8 @@ export function groupTurns(
       const steps = new Set<number>()
       for (const part of a.parts) {
         if (part.type === "dynamic-tool") turn.toolCount++
-        if ("stepIndex" in part && typeof part.stepIndex === "number") steps.add(part.stepIndex)
+        if ("stepIndex" in part && typeof part.stepIndex === "number")
+          steps.add(part.stepIndex)
       }
       turn.stepCount = steps.size
     }

@@ -8,9 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx}\"",
-    "check": "prettier --check \"**/*.{ts,tsx,js,jsx}\"",
+    "lint": "eslint --max-warnings 0 .",
+    "format": "prettier --write .",
+    "check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "dev:collector": "node scripts/dev-collector.mjs"
   },

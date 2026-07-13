@@ -5,7 +5,15 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe("studio-api", () => {
   it("unwraps the sessions envelope", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ sessions: [{ sessionId: "s1" }] }), { status: 200 })))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ sessions: [{ sessionId: "s1" }] }), {
+            status: 200,
+          })
+      )
+    )
     const sessions = await fetchSessions()
     expect(sessions).toEqual([{ sessionId: "s1" }])
   })

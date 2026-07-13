@@ -1,22 +1,53 @@
 import type { SessionStatus, SessionSummary } from "eve-studio"
 
-export const STATUS_META: Record<SessionStatus, { label: string; dotClass: string }> = {
+export const STATUS_META: Record<
+  SessionStatus,
+  { label: string; dotClass: string }
+> = {
   working: { label: "Working", dotClass: "bg-emerald-500 animate-pulse" },
   waiting: { label: "Waiting", dotClass: "bg-amber-500" },
   completed: { label: "Completed", dotClass: "bg-muted-foreground/40" },
   failed: { label: "Failed", dotClass: "bg-red-500" },
 }
 
-/** Newest-updated project group first; sessions newest-first within each group. */
-export function groupByProject(sessions: SessionSummary[]): Array<[string, SessionSummary[]]> {
-  const groups = new Map<string, SessionSummary[]>()
+export interface SessionProjectGroup {
+  key: string
+  label: string
+  sessions: SessionSummary[]
+}
+
+/** Newest-updated project identity first; sessions newest-first within each group. */
+export function groupByProject(
+  sessions: SessionSummary[]
+): SessionProjectGroup[] {
+  const groups = new Map<
+    string,
+    { key: string; name: string; root: string; sessions: SessionSummary[] }
+  >()
   for (const s of [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)) {
-    const key = s.project.name || "(unknown project)"
-    const list = groups.get(key)
-    if (list) list.push(s)
-    else groups.set(key, [s])                              // insertion order = recency order
+    const name = s.project.name || "(unknown project)"
+    const root = s.project.root || "unknown"
+    const key = JSON.stringify([name, root])
+    const group = groups.get(key)
+    if (group) group.sessions.push(s)
+    else groups.set(key, { key, name, root, sessions: [s] })
   }
-  return [...groups.entries()]
+
+  const rootsByName = new Map<string, Set<string>>()
+  for (const group of groups.values()) {
+    const roots = rootsByName.get(group.name) ?? new Set<string>()
+    roots.add(group.root)
+    rootsByName.set(group.name, roots)
+  }
+
+  return [...groups.values()].map((group) => ({
+    key: group.key,
+    label:
+      (rootsByName.get(group.name)?.size ?? 0) > 1
+        ? `${group.name} · ${group.root.slice(0, 6)}`
+        : group.name,
+    sessions: group.sessions,
+  }))
 }
 
 export function shortSessionId(id: string): string {

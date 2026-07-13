@@ -1,11 +1,16 @@
-import type { SessionSummary, StoredEvent } from "eve-studio"
+import type {
+  ProjectionDiagnostic,
+  SessionSummary,
+  StoredEvent,
+} from "eve-studio"
 
 export interface SessionDetail {
   summary: SessionSummary
   events: StoredEvent[]
   reducedState: unknown
   reducedUpTo: number
-  reducerError?: string
+  diagnostics: ProjectionDiagnostic[]
+  diagnosticCount: number
 }
 
 export interface StudioHealth {

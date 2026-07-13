@@ -57,8 +57,26 @@ describe("turnToMarkdown", () => {
 
   it("includes a metadata block with duration when timing is present", () => {
     const events = [
-      { position: 0, source: "disk", receivedAt: 0, event: { type: "turn.started", data: { turnId: "turn_0" }, meta: { at: "2026-07-11T00:00:00.000Z" } } },
-      { position: 1, source: "disk", receivedAt: 0, event: { type: "turn.completed", data: { turnId: "turn_0" }, meta: { at: "2026-07-11T00:00:46.000Z" } } },
+      {
+        position: 0,
+        source: "disk",
+        receivedAt: 0,
+        event: {
+          type: "turn.started",
+          data: { turnId: "turn_0" },
+          meta: { at: "2026-07-11T00:00:00.000Z" },
+        },
+      },
+      {
+        position: 1,
+        source: "disk",
+        receivedAt: 0,
+        event: {
+          type: "turn.completed",
+          data: { turnId: "turn_0" },
+          meta: { at: "2026-07-11T00:00:46.000Z" },
+        },
+      },
     ] as unknown as StoredEvent[]
     const [timed] = groupTurns(messages, events)
     const md = turnToMarkdown(timed, { detailed: true })
