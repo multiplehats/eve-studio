@@ -1,5 +1,5 @@
-import { defaultMessageReducer } from "eve/client";
-import type { IngestEnvelope, Registry, RegistryOptions, RegistryUpdate, SessionStatus, SessionSummary, SessionUsage, StoredEvent } from "./types.js";
+import { createMessageProjection, type MessageProjection } from "./message-reduction.js";
+import type { IngestEnvelope, ProjectionDiagnostic, Registry, RegistryOptions, RegistryUpdate, SessionStatus, SessionSummary, SessionUsage, StoredEvent } from "./types.js";
 
 const STATUS_BY_TYPE: Partial<Record<string, SessionStatus>> = {
   "session.failed": "failed",
@@ -11,24 +11,34 @@ const STATUS_BY_TYPE: Partial<Record<string, SessionStatus>> = {
 
 interface SessionRecord {
   summary: SessionSummary;
-  events: Map<number, StoredEvent>;
+  events: Map<number, CachedStoredEvent>;
+  createdOrder: number;
   firstHookEpoch?: string;
   statusPosition: number;
   bytes: number;
-  reducer: ReturnType<typeof defaultMessageReducer>;
+  reducer: MessageProjection;
   reduced: unknown;
   reducedUpTo: number;
-  reducerError?: string;
-  stallSince?: number;
+  diagnostics: ProjectionDiagnostic[];
+  diagnosticCount: number;
+  gapSince?: number;
+  gapTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface CachedStoredEvent extends StoredEvent {
+  byteSize: number;
 }
 
 export function createRegistry(opts: RegistryOptions = {}): Registry {
   const maxSessionBytes = opts.maxSessionBytes ?? 5_000_000;
+  const configuredMaxSessions = opts.maxSessions ?? 200;
+  const maxSessions = Number.isInteger(configuredMaxSessions) && configuredMaxSessions > 0 ? configuredMaxSessions : 200;
   const now = opts.now ?? Date.now;
   const rebaseAfterMs = opts.rebaseAfterMs ?? 3_000;
   const sessions = new Map<string, SessionRecord>();
   const listeners = new Set<(u: RegistryUpdate) => void>();
   const stats = { sessions: 0, eventsAccepted: 0, duplicatesDropped: 0, malformedSkipped: 0 };
+  let nextCreatedOrder = 0;
 
   function emit(u: RegistryUpdate): void {
     for (const fn of listeners) {
@@ -50,7 +60,7 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
     let rec = sessions.get(id);
     if (!rec) {
       const instanceId = seed.process?.instanceId ?? "unknown";
-      const reducer = defaultMessageReducer();
+      const reducer = createMessageProjection();
       rec = {
         summary: {
           sessionId: id,
@@ -68,16 +78,50 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
           updatedAt: now(),
         },
         events: new Map(),
+        createdOrder: nextCreatedOrder++,
         statusPosition: -1,
         bytes: 0,
         reducer,
         reduced: reducer.initial(),
         reducedUpTo: 0,
+        diagnostics: [],
+        diagnosticCount: 0,
       };
       sessions.set(id, rec);
       stats.sessions++;
+      enforceSessionCap(rec);
     }
     return rec;
+  }
+
+  function clearGapTimer(rec: SessionRecord): void {
+    if (rec.gapTimer !== undefined) clearTimeout(rec.gapTimer);
+    rec.gapTimer = undefined;
+  }
+
+  function removeSession(rec: SessionRecord): void {
+    clearGapTimer(rec);
+    if (!sessions.delete(rec.summary.sessionId)) return;
+    stats.sessions--;
+    emit({ kind: "session-removed", sessionId: rec.summary.sessionId });
+  }
+
+  function oldest(records: SessionRecord[]): SessionRecord | undefined {
+    return records.sort((a, b) =>
+      a.summary.updatedAt - b.summary.updatedAt
+      || a.createdOrder - b.createdOrder
+      || a.summary.sessionId.localeCompare(b.summary.sessionId)
+    )[0];
+  }
+
+  function enforceSessionCap(protectedRecord: SessionRecord): void {
+    while (sessions.size > maxSessions) {
+      const records = [...sessions.values()].filter((rec) => rec !== protectedRecord);
+      const terminal = records.filter((rec) => rec.summary.status === "completed" || rec.summary.status === "failed");
+      const victim = oldest(terminal.length > 0 ? terminal : records);
+      if (victim === undefined) return;
+      removeSession(victim);
+    }
   }
 
   /**
@@ -127,9 +171,16 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
       stats.duplicatesDropped++;
       return false;
     }
-    const stored: StoredEvent = { position, source, receivedAt: now(), event };
+    const serialized = JSON.stringify(event);
+    const stored: CachedStoredEvent = {
+      position,
+      source,
+      receivedAt: now(),
+      byteSize: Buffer.byteLength(serialized, "utf8"),
+      event,
+    };
     rec.events.set(position, stored);
-    rec.bytes += JSON.stringify(event).length;
+    rec.bytes += stored.byteSize;
     rec.summary.eventCount = rec.events.size;
     rec.summary.maxPosition = Math.max(rec.summary.maxPosition, position);
     rec.summary.updatedAt = stored.receivedAt;
@@ -139,10 +190,10 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
     }
     accumulateUsage(rec, event);
     advanceReduction(rec);
-    maybeRebase(rec, false);
+    manageGap(rec, false);
     evictIfNeeded(rec);
     stats.eventsAccepted++;
-    emit({ kind: "event", sessionId: rec.summary.sessionId, position, event });
+    emit({ kind: "event", sessionId: rec.summary.sessionId, position });
     emit({ kind: "session", session: rec.summary });
     return true;
   }
@@ -153,41 +204,87 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
     return low;
   }
 
+  function diagnosticMessage(err: unknown): string {
+    if (!(err instanceof Error)) return "Projection reducer threw a non-Error value.";
+    const normalized = err.message.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+    return (normalized || "Projection reducer failed.").slice(0, 240);
+  }
+
+  function appendDiagnostic(rec: SessionRecord, stored: StoredEvent, err: unknown): void {
+    rec.diagnosticCount++;
+    rec.diagnostics.push({
+      position: stored.position,
+      eventType: stored.event.type,
+      message: diagnosticMessage(err),
+    });
+    if (rec.diagnostics.length > 5) rec.diagnostics.splice(0, rec.diagnostics.length - 5);
+  }
+
   function advanceReduction(rec: SessionRecord): void {
-    if (rec.reducerError !== undefined) return;
     while (rec.events.has(rec.reducedUpTo)) {
       const stored = rec.events.get(rec.reducedUpTo)!;
       try {
         rec.reduced = rec.reducer.reduce(rec.reduced as never, stored.event as never);
       } catch (err) {
-        rec.reducerError = err instanceof Error ? err.message : String(err);
-        return;
+        appendDiagnostic(rec, stored, err);
       }
       rec.reducedUpTo++;
     }
   }
 
-  /**
-   * Gap recovery. A gap whose prefix was never received (reducedUpTo below the
-   * lowest position we hold) cannot fill from stored events: mid-session
-   * attach and forwarder maxQueue overflow both produce it. After a dwell
-   * (tolerates shuffled 25ms-scale batches), or immediately under cap pressure
-   * (`force`), restart the reducer at the lowest held position and flag the
-   * session. A degraded-but-live view beats a frozen one, and eviction needs
-   * reducedUpTo to move or the byte cap is dead.
-   */
-  function maybeRebase(rec: SessionRecord, force: boolean): void {
-    if (rec.reducerError !== undefined) return;
-    const low = lowestStored(rec);
-    if (!Number.isFinite(low) || rec.reducedUpTo >= low) { rec.stallSince = undefined; return; }
-    rec.stallSince ??= now();
-    if (force || now() - rec.stallSince > rebaseAfterMs) {
-      rec.reduced = rec.reducer.initial();
-      rec.reducedUpTo = low;
-      rec.summary.degraded = "gap";
-      rec.stallSince = undefined;
-      advanceReduction(rec);
+  function nextStoredAfterGap(rec: SessionRecord): number {
+    let next = Infinity;
+    for (const position of rec.events.keys()) {
+      if (position > rec.reducedUpTo && position < next) next = position;
     }
+    return next;
+  }
+
+  function recoverGap(rec: SessionRecord, next: number): void {
+    const isLeadingGap = rec.reducedUpTo === 0;
+    clearGapTimer(rec);
+    rec.gapSince = undefined;
+    if (isLeadingGap) {
+      rec.reducer = createMessageProjection();
+      rec.reduced = rec.reducer.initial();
+    }
+    rec.reducedUpTo = next;
+    rec.summary.degraded = "gap";
+    advanceReduction(rec);
+  }
+
+  function manageGap(rec: SessionRecord, force: boolean): void {
+    if (rec.events.has(rec.reducedUpTo)) {
+      clearGapTimer(rec);
+      rec.gapSince = undefined;
+      return;
+    }
+    const next = nextStoredAfterGap(rec);
+    if (!Number.isFinite(next)) {
+      clearGapTimer(rec);
+      rec.gapSince = undefined;
+      return;
+    }
+
+    rec.gapSince ??= now();
+    const elapsed = Math.max(0, now() - rec.gapSince);
+    if (force || elapsed >= rebaseAfterMs) {
+      recoverGap(rec, next);
+      return;
+    }
+    if (rec.gapTimer !== undefined) return;
+
+    rec.gapTimer = setTimeout(() => {
+      rec.gapTimer = undefined;
+      if (!sessions.has(rec.summary.sessionId)) return;
+      const before = rec.reducedUpTo;
+      manageGap(rec, false);
+      if (rec.reducedUpTo !== before) {
+        manageGap(rec, false);
+        emit({ kind: "session", session: rec.summary });
+      }
+    }, Math.max(0, rebaseAfterMs - elapsed));
+    rec.gapTimer.unref?.();
   }
 
   function evictIfNeeded(rec: SessionRecord): void {
@@ -195,18 +292,14 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
       let victim = Infinity;
       for (const p of rec.events.keys()) if (p < rec.reducedUpTo && p < victim) victim = p;
       if (!Number.isFinite(victim)) {
-        if (rec.reducerError === undefined) {
-          const before = rec.reducedUpTo;
-          maybeRebase(rec, true);
-          if (rec.reducedUpTo === before) break;             // nothing rebasable (transient contiguous run): allow, advance will consume it
-          continue;                                          // rebase moved reducedUpTo: retry the victim search
-        }
-        victim = lowestStored(rec);                          // reducer dead, cap survives it: evict oldest unconditionally
-        if (!Number.isFinite(victim)) break;
+        const before = rec.reducedUpTo;
+        manageGap(rec, true);
+        if (rec.reducedUpTo === before) break;
+        continue;
       }
       const evicted = rec.events.get(victim)!;
       rec.events.delete(victim);
-      rec.bytes -= JSON.stringify(evicted.event).length;
+      rec.bytes -= evicted.byteSize;
       rec.summary.evictedBelow = victim + 1;
       rec.summary.eventCount = rec.events.size;
     }
@@ -258,10 +351,13 @@ export function createRegistry(opts: RegistryOptions = {}): Registry {
       if (!rec) return undefined;
       return {
         summary: rec.summary,
-        events: [...rec.events.values()].sort((a, b) => a.position - b.position),
+        events: [...rec.events.values()]
+          .sort((a, b) => a.position - b.position)
+          .map(({ byteSize: _byteSize, ...event }) => event),
         reducedState: rec.reduced,
         reducedUpTo: rec.reducedUpTo,
-        reducerError: rec.reducerError,
+        diagnostics: rec.diagnostics,
+        diagnosticCount: rec.diagnosticCount,
       };
     },
 

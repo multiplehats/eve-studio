@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findAgentProjects } from "../src/locate.js";
-import { installedEveVersion, meetsMinimum } from "../src/version-gate.js";
-import { detectPackageManager, isExtensionMounted, scaffoldMount } from "../src/mount.js";
+import { installedEveVersion, SUPPORTED_EVE_RANGE, supportsEveVersion } from "../src/version-gate.js";
+import { createdMountFile, detectPackageManager, isExtensionMounted, scaffoldMount } from "../src/mount.js";
 
 function tmp(): string { return mkdtempSync(join(tmpdir(), "eve-studio-cli-")); }
 function makeAgentProject(root: string, rel = "."): string {
@@ -37,14 +37,20 @@ describe("version gate", () => {
     expect(installedEveVersion(p)).toBe("0.22.4");
     expect(installedEveVersion(makeAgentProject(tmp()))).toBeUndefined();
   });
-  it("compares numerically, not lexically", () => {
-    expect(meetsMinimum("0.22.3")).toBe(true);
-    expect(meetsMinimum("0.22.4")).toBe(true);
-    expect(meetsMinimum("0.100.0")).toBe(true);            // lexical compare would fail this
-    expect(meetsMinimum("0.22.2")).toBe(false);
-    expect(meetsMinimum("0.17.2")).toBe(false);            // auttendo today
-    expect(meetsMinimum("1.0.0")).toBe(true);
-    expect(meetsMinimum("garbage")).toBe(false);
+  it("accepts only stable Eve releases in the supported compatibility window", () => {
+    expect(SUPPORTED_EVE_RANGE).toBe(">=0.22.3 <0.23.0");
+    expect(supportsEveVersion("0.22.3")).toBe(true);
+    expect(supportsEveVersion("0.22.4")).toBe(true);
+    expect(supportsEveVersion("0.22.99")).toBe(true);
+    expect(supportsEveVersion("0.22.2")).toBe(false);
+    expect(supportsEveVersion("0.17.2")).toBe(false);
+    expect(supportsEveVersion("0.23.0")).toBe(false);
+    expect(supportsEveVersion("1.0.0")).toBe(false);
+    expect(supportsEveVersion("0.22.4-beta.1")).toBe(false);
+    expect(supportsEveVersion("0.22.4+build.1")).toBe(false);
+    expect(supportsEveVersion(" 0.22.4 ")).toBe(false);
+    expect(supportsEveVersion("0.22.999999999999999999999")).toBe(false);
+    expect(supportsEveVersion("garbage")).toBe(false);
   });
 });
 
@@ -66,5 +72,52 @@ describe("mount", () => {
     expect(command).toEqual(["pnpm", "add", "@eve-studio/extension"]);
     expect(mountFile).toBe(join(p, "agent", "extensions", "studio.ts"));
     expect(isExtensionMounted(p)).toBe(false);             // dep not installed yet: caller spawns the command
+  });
+
+  it("creates a missing mount exclusively", () => {
+    const p = makeAgentProject(tmp());
+
+    expect(scaffoldMount(p)).toMatchObject({ kind: "ready", created: true });
+  });
+
+  it("reuses the exact generated mount without claiming ownership", () => {
+    const p = makeAgentProject(tmp());
+    const mountFile = join(p, "agent", "extensions", "studio.ts");
+    mkdirSync(join(p, "agent", "extensions"), { recursive: true });
+    writeFileSync(mountFile, 'export { default } from "@eve-studio/extension";\n');
+
+    expect(scaffoldMount(p)).toMatchObject({ kind: "ready", mountFile, created: false });
+  });
+
+  it("returns a typed conflict and preserves an unrelated studio.ts", () => {
+    const p = makeAgentProject(tmp());
+    const mountFile = join(p, "agent", "extensions", "studio.ts");
+    const userSource = 'export default { name: "my studio extension" };\n';
+    mkdirSync(join(p, "agent", "extensions"), { recursive: true });
+    writeFileSync(mountFile, userSource);
+
+    expect(scaffoldMount(p)).toMatchObject({ kind: "conflict", mountFile });
+    expect(readFileSync(mountFile, "utf8")).toBe(userSource);
+  });
+
+  it("only marks a mount created by this invocation as safe to roll back", () => {
+    const createdProject = makeAgentProject(tmp());
+    const created = scaffoldMount(createdProject);
+
+    const existingProject = makeAgentProject(tmp());
+    const existingMount = join(existingProject, "agent", "extensions", "studio.ts");
+    mkdirSync(join(existingProject, "agent", "extensions"), { recursive: true });
+    writeFileSync(existingMount, 'export { default } from "@eve-studio/extension";\n');
+    const existing = scaffoldMount(existingProject);
+
+    const conflictProject = makeAgentProject(tmp());
+    const conflictMount = join(conflictProject, "agent", "extensions", "studio.ts");
+    mkdirSync(join(conflictProject, "agent", "extensions"), { recursive: true });
+    writeFileSync(conflictMount, "export default {};\n");
+    const conflict = scaffoldMount(conflictProject);
+
+    expect(createdMountFile(created)).toBe(join(createdProject, "agent", "extensions", "studio.ts"));
+    expect(createdMountFile(existing)).toBeUndefined();
+    expect(createdMountFile(conflict)).toBeUndefined();
   });
 });

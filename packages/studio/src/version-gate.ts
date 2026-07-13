@@ -11,18 +11,18 @@ export function installedEveVersion(projectRoot: string): string | undefined {
   }
 }
 
-function parseVersion(v: string): [number, number, number] | null {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+export const SUPPORTED_EVE_RANGE = ">=0.22.3 <0.23.0";
+
+function parseStableVersion(version: string): [number, number, number] | undefined {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
+  if (!match) return undefined;
+  const parsed: [number, number, number] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return parsed.every(Number.isSafeInteger) ? parsed : undefined;
 }
 
-export function meetsMinimum(version: string, minimum = "0.22.3"): boolean {
-  const a = parseVersion(version);
-  const b = parseVersion(minimum);
-  if (!a || !b) return false;
-  for (let i = 0; i < 3; i++) {
-    if (a[i] > b[i]) return true;
-    if (a[i] < b[i]) return false;
-  }
-  return true;
+export function supportsEveVersion(version: string): boolean {
+  const parsed = parseStableVersion(version);
+  if (!parsed) return false;
+  const [major, minor, patch] = parsed;
+  return major === 0 && minor === 22 && patch >= 3;
 }

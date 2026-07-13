@@ -1,9 +1,9 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../src/registry.js";
-import { startStudioServer, type StudioServer } from "../src/server.js";
+import { startStudioServer, type StudioServer, writeSseFrame } from "../src/server.js";
 
 let server: StudioServer | undefined;
 afterEach(async () => { await server?.close(); server = undefined; });
@@ -18,6 +18,10 @@ function envelope(sessionId: string, seq: number, type: string) {
 }
 
 describe("collector server", () => {
+  it("rejects non-loopback hosts before listening", async () => {
+    await expect(startStudioServer({ registry: createRegistry(), port: 0, host: "0.0.0.0" })).rejects.toThrow("127.0.0.1");
+  });
+
   it("health", async () => {
     const s = await boot();
     const res = await fetch(`${s.url}/health`);
@@ -39,7 +43,7 @@ describe("collector server", () => {
     expect(detail.events.map((e: { position: number }) => e.position)).toEqual([0, 1]);
     expect(detail).toHaveProperty("reducedState");           // Task 5: reduced conversation state
     expect(detail.reducedUpTo).toBe(2);
-    expect(detail.reducerError).toBeUndefined();
+    expect(detail.diagnostics).toEqual([]);
   });
 
   it("survives malformed ingest bodies", async () => {
@@ -49,6 +53,31 @@ describe("collector server", () => {
       expect([204, 400]).toContain(res.status);
     }
     expect((await (await fetch(`${s.url}/health`)).json()).ok).toBe(true);
+  });
+
+  it("requires the JSON media type for ingest", async () => {
+    const s = await boot();
+    const missing = await fetch(`${s.url}/ingest`, { method: "POST" });
+    const wrong = await fetch(`${s.url}/ingest`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ events: [] }),
+    });
+
+    expect(missing.status).toBe(415);
+    expect(wrong.status).toBe(415);
+  });
+
+  it("rejects browser-originated ingest requests", async () => {
+    const s = await boot();
+    const res = await fetch(`${s.url}/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8", origin: "https://attacker.example" },
+      body: JSON.stringify({ events: [envelope("browser", 0, "session.started")] }),
+    });
+
+    expect(res.status).toBe(403);
+    expect((await (await fetch(`${s.url}/api/sessions`)).json()).sessions).toHaveLength(0);
   });
 
   it("unknown route -> 404; missing session -> 404", async () => {
@@ -76,10 +105,11 @@ describe("collector server", () => {
     await readUntil("event: snapshot");
     await fetch(`${s.url}/ingest`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events: [envelope("live-1", 0, "session.started")] }),
+      body: JSON.stringify({ events: [envelope("live-1", 0, "raw-body-must-not-stream")] }),
     });
     await readUntil("live-1");
     expect(buffer).toContain("event: update");
+    expect(buffer).not.toContain("raw-body-must-not-stream");
     await reader.cancel();
   });
 
@@ -96,6 +126,18 @@ describe("collector server", () => {
     const body = await (await fetch(`${server.url}/health`)).json();
     expect(body.studioVersion).toBe("0.1.0");
     expect(body.eveVersion).toBe("0.22.4");
+  });
+});
+
+describe("SSE backpressure", () => {
+  it("ends a slow response when a frame cannot be buffered", () => {
+    const response = {
+      write: vi.fn(() => false),
+      end: vi.fn(),
+    };
+
+    expect(writeSseFrame(response, "update", { kind: "event" })).toBe(false);
+    expect(response.end).toHaveBeenCalledOnce();
   });
 });
 

@@ -2,6 +2,15 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, join } from "node:path";
 
 const PKG = "@eve-studio/extension";
+const GENERATED_MOUNT = `export { default } from "${PKG}";\n`;
+
+export type MountResult =
+  | { kind: "ready"; command: string[]; mountFile: string; created: boolean }
+  | { kind: "conflict"; command: string[]; mountFile: string };
+
+export function createdMountFile(result: MountResult): string | undefined {
+  return result.kind === "ready" && result.created ? result.mountFile : undefined;
+}
 
 export function isExtensionMounted(projectRoot: string): boolean {
   try {
@@ -30,13 +39,21 @@ export function detectPackageManager(projectRoot: string): "pnpm" | "yarn" | "bu
   return "npm";
 }
 
-export function scaffoldMount(projectRoot: string): { command: string[]; mountFile: string } {
+export function scaffoldMount(projectRoot: string): MountResult {
   const pm = detectPackageManager(projectRoot);
   const command = pm === "npm" ? ["npm", "install", PKG] : [pm, "add", PKG];
   const mountFile = join(projectRoot, "agent", "extensions", "studio.ts");
   mkdirSync(dirname(mountFile), { recursive: true });
-  writeFileSync(mountFile, `export { default } from "${PKG}";\n`);
-  return { command, mountFile };
+  try {
+    writeFileSync(mountFile, GENERATED_MOUNT, { flag: "wx" });
+    return { kind: "ready", command, mountFile, created: true };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (readFileSync(mountFile, "utf8") === GENERATED_MOUNT) {
+      return { kind: "ready", command, mountFile, created: false };
+    }
+    return { kind: "conflict", command, mountFile };
+  }
 }
 
 export function mountInstructions(projectRoot: string): string {

@@ -14,6 +14,21 @@ export interface StudioServer { url: string; port: number; close(): Promise<void
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const HEARTBEAT_MS = 15_000;
 
+export interface SseWritable {
+  write(chunk: string): boolean;
+  end(): void;
+}
+
+function writeSseChunk(res: SseWritable, chunk: string): boolean {
+  if (res.write(chunk)) return true;
+  res.end();
+  return false;
+}
+
+export function writeSseFrame(res: SseWritable, event: string, data: unknown): boolean {
+  return writeSseChunk(res, `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -29,6 +44,9 @@ const MIME: Record<string, string> = {
 export function startStudioServer(opts: StudioServerOptions): Promise<StudioServer> {
   const { registry } = opts;
   const host = opts.host ?? "127.0.0.1";
+  if (host !== "127.0.0.1") {
+    return Promise.reject(new Error("eve-studio only listens on 127.0.0.1"));
+  }
   const sseClients = new Set<ServerResponse>();
 
   const server = createServer((req, res) => {
@@ -59,6 +77,15 @@ export function startStudioServer(opts: StudioServerOptions): Promise<StudioServ
   }
 
   async function handleIngest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.headers.origin !== undefined) {
+      req.resume();
+      return json(res, 403, { error: "browser origins are not allowed" });
+    }
+    const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+    if (mediaType !== "application/json") {
+      req.resume();
+      return json(res, 415, { error: "application/json required" });
+    }
     let size = 0;
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
@@ -102,19 +129,29 @@ export function startStudioServer(opts: StudioServerOptions): Promise<StudioServ
       "cache-control": "no-cache",
       connection: "keep-alive",
     });
-    send(res, "snapshot", { sessions: registry.getSessions() });
-    sseClients.add(res);
-    const unsubscribe = registry.subscribe((u: RegistryUpdate) => send(res, "update", u));
-    const heartbeat = setInterval(() => res.write(": ping\n\n"), HEARTBEAT_MS);
-    res.on("close", () => {
-      clearInterval(heartbeat);
+    let active = true;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let unsubscribe = () => {};
+    const disconnect = () => {
+      if (!active) return;
+      active = false;
+      if (heartbeat !== undefined) clearInterval(heartbeat);
       unsubscribe();
       sseClients.delete(res);
-    });
-  }
+      if (!res.writableEnded) res.end();
+    };
+    const send = (event: string, data: unknown) => {
+      if (active && !writeSseFrame(res, event, data)) disconnect();
+    };
 
-  function send(res: ServerResponse, event: string, data: unknown): void {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    res.on("close", disconnect);
+    send("snapshot", { sessions: registry.getSessions() });
+    if (!active) return;
+    sseClients.add(res);
+    unsubscribe = registry.subscribe((u: RegistryUpdate) => send("update", u));
+    heartbeat = setInterval(() => {
+      if (active && !writeSseChunk(res, ": ping\n\n")) disconnect();
+    }, HEARTBEAT_MS);
   }
 
   function json(res: ServerResponse, status: number, body: unknown): void {
