@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { defineHook } from "eve/hooks";
-import { parseStudioPort, projectRootDigest } from "../lib/config.js";
+import { parseStudioPort, projectNameFromRoot, projectRootDigest } from "../lib/config.js";
 import { buildEnvelope, isInert, type EnvelopeState } from "../lib/envelope.js";
 import { Forwarder } from "../lib/forwarder.js";
 
@@ -29,7 +29,7 @@ const state: EnvelopeState = {
 function safeProjectName(): string {
   try {
     // cwd of the compiled agent process is the agent project root
-    return process.env.npm_package_name ?? process.cwd().split("/").at(-1) ?? "unknown";
+    return process.env.npm_package_name ?? projectNameFromRoot(process.cwd());
   } catch {
     return "unknown";
   }

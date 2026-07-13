@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectRootDigest, parseStudioPort } from "../ext/lib/config.js";
+import { projectNameFromRoot, projectRootDigest, parseStudioPort } from "../ext/lib/config.js";
 
 describe("parseStudioPort", () => {
   it("uses the collector default when the setting is missing", () => {
@@ -31,5 +31,18 @@ describe("projectRootDigest", () => {
     expect(digest).not.toContain("Users");
     expect(digest).not.toContain("chris");
     expect(projectRootDigest("/Users/chris/another-agent")).not.toBe(digest);
+  });
+});
+
+describe("projectNameFromRoot", () => {
+  it("keeps only the final directory on POSIX and Windows paths", () => {
+    expect(projectNameFromRoot("/Users/chris/agent-one")).toBe("agent-one");
+    expect(projectNameFromRoot("C:\\Users\\chris\\agent-two")).toBe("agent-two");
+    expect(projectNameFromRoot("/Users/chris/agent-one/")).toBe("agent-one");
+  });
+
+  it("uses an unknown label when no directory name is available", () => {
+    expect(projectNameFromRoot("/")).toBe("unknown");
+    expect(projectNameFromRoot("")).toBe("unknown");
   });
 });

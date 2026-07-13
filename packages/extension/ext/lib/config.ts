@@ -14,3 +14,7 @@ export function parseStudioPort(value: string | undefined): number | undefined {
 export function projectRootDigest(root: string): string {
   return createHash("sha256").update(root).digest("hex").slice(0, 12);
 }
+
+export function projectNameFromRoot(root: string): string {
+  return root.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || "unknown";
+}
