@@ -1,10 +1,16 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findAgentProjects } from "../src/locate.js";
 import { installedEveVersion, SUPPORTED_EVE_RANGE, supportsEveVersion } from "../src/version-gate.js";
-import { createdMountFile, detectPackageManager, isExtensionMounted, scaffoldMount } from "../src/mount.js";
+import {
+  createdMountFile,
+  detectPackageManager,
+  isExtensionMounted,
+  removeGeneratedMountFile,
+  scaffoldMount,
+} from "../src/mount.js";
 
 function tmp(): string { return mkdtempSync(join(tmpdir(), "eve-studio-cli-")); }
 function makeAgentProject(root: string, rel = "."): string {
@@ -31,11 +37,22 @@ describe("findAgentProjects", () => {
 
 describe("version gate", () => {
   it("reads the installed version, not the package.json range", () => {
+    expect(installedEveVersion(makeAgentProject(tmp()))).toBeUndefined();
     const p = makeAgentProject(tmp());
     mkdirSync(join(p, "node_modules", "eve"), { recursive: true });
     writeFileSync(join(p, "node_modules", "eve", "package.json"), JSON.stringify({ name: "eve", version: "0.22.4" }));
     expect(installedEveVersion(p)).toBe("0.22.4");
-    expect(installedEveVersion(makeAgentProject(tmp()))).toBeUndefined();
+  });
+  it("resolves Eve from a hoisted workspace dependency", () => {
+    const workspace = tmp();
+    const p = makeAgentProject(workspace, "apps/assistant");
+    mkdirSync(join(workspace, "node_modules", "eve"), { recursive: true });
+    writeFileSync(
+      join(workspace, "node_modules", "eve", "package.json"),
+      JSON.stringify({ name: "eve", version: "0.22.4" }),
+    );
+
+    expect(installedEveVersion(p)).toBe("0.22.4");
   });
   it("accepts only stable Eve releases in the supported compatibility window", () => {
     expect(SUPPORTED_EVE_RANGE).toBe(">=0.22.3 <0.23.0");
@@ -119,5 +136,20 @@ describe("mount", () => {
     expect(createdMountFile(created)).toBe(join(createdProject, "agent", "extensions", "studio.ts"));
     expect(createdMountFile(existing)).toBeUndefined();
     expect(createdMountFile(conflict)).toBeUndefined();
+  });
+
+  it("rolls back only an untouched generated mount", () => {
+    const untouchedProject = makeAgentProject(tmp());
+    const untouched = createdMountFile(scaffoldMount(untouchedProject));
+    expect(untouched).toBeDefined();
+    expect(removeGeneratedMountFile(untouched!)).toBe(true);
+    expect(existsSync(untouched!)).toBe(false);
+
+    const editedProject = makeAgentProject(tmp());
+    const edited = createdMountFile(scaffoldMount(editedProject));
+    expect(edited).toBeDefined();
+    writeFileSync(edited!, "// edited while the package manager was running\n");
+    expect(removeGeneratedMountFile(edited!)).toBe(false);
+    expect(readFileSync(edited!, "utf8")).toBe("// edited while the package manager was running\n");
   });
 });

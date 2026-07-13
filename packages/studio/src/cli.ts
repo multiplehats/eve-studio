@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -8,7 +8,14 @@ import { fileURLToPath } from "node:url";
 import { createStudioProgram, invalidStudioPortMessage, parseStudioPort, type StudioCliOptions } from "./cli-program.js";
 import { applyDiskScan } from "./disk-scan.js";
 import { findAgentProjects } from "./locate.js";
-import { createdMountFile, detectPackageManager, isExtensionMounted, mountInstructions, scaffoldMount } from "./mount.js";
+import {
+  createdMountFile,
+  detectPackageManager,
+  isExtensionMounted,
+  mountInstructions,
+  removeGeneratedMountFile,
+  scaffoldMount,
+} from "./mount.js";
 import { createRegistry } from "./registry.js";
 import { startStudioServer } from "./server.js";
 import { installedEveVersion, SUPPORTED_EVE_RANGE, supportsEveVersion } from "./version-gate.js";
@@ -69,8 +76,11 @@ if (!isExtensionMounted(project)) {
       }
     } catch (err) {
       if (rollbackFile) {
-        rmSync(rollbackFile, { force: true });
-        console.error(`eve-studio: removed ${rollbackFile}. Recreate it after the install succeeds (steps below).`);
+        if (removeGeneratedMountFile(rollbackFile)) {
+          console.error(`eve-studio: removed ${rollbackFile}. Recreate it after the install succeeds (steps below).`);
+        } else if (existsSync(rollbackFile)) {
+          console.error(`eve-studio: kept ${rollbackFile} because it changed while the install was running.`);
+        }
       }
       console.error(`eve-studio: mount failed (${err instanceof Error ? err.message : err}); continuing without it`);
       console.error(mountInstructions(project));
