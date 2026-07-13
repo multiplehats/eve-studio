@@ -16,6 +16,7 @@ permissions:
 jobs:
   version-plan:
     name: Build version patch
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -50,6 +51,11 @@ jobs:
       - name: Decide whether version PR is needed
         id: decide
         run: |
+          for changelog in packages/studio/CHANGELOG.md packages/extension/CHANGELOG.md; do
+            if [ -e "$changelog" ]; then
+              git add --intent-to-add "$changelog"
+            fi
+          done
           if git diff --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
@@ -68,7 +74,7 @@ jobs:
   version-pr:
     name: Open version PR
     needs: version-plan
-    if: needs.version-plan.outputs.has_changes == 'true'
+    if: github.ref == 'refs/heads/main' && needs.version-plan.outputs.has_changes == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -114,7 +120,7 @@ jobs:
   build-pack:
     name: Build and pack release
     needs: version-plan
-    if: needs.version-plan.outputs.has_changes == 'false'
+    if: github.ref == 'refs/heads/main' && needs.version-plan.outputs.has_changes == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -209,7 +215,7 @@ jobs:
   publish:
     name: Publish
     needs: build-pack
-    if: needs.build-pack.outputs.has_publishable_tarballs == 'true'
+    if: github.ref == 'refs/heads/main' && needs.build-pack.outputs.has_publishable_tarballs == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm-publish

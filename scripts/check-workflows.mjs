@@ -12,6 +12,19 @@ const allowList = new Map([
 ]);
 
 const failures = [];
+const mainRefCondition = "github.ref == 'refs/heads/main'";
+
+const versionPatchCommand = `for changelog in packages/studio/CHANGELOG.md packages/extension/CHANGELOG.md; do
+  if [ -e "$changelog" ]; then
+    git add --intent-to-add "$changelog"
+  fi
+done
+if git diff --quiet; then
+  echo "has_changes=false" >> "$GITHUB_OUTPUT"
+else
+  echo "has_changes=true" >> "$GITHUB_OUTPUT"
+  git diff --binary > changeset-version.patch
+fi`;
 
 function fail(file, message) {
   failures.push(`${file}: ${message}`);
@@ -279,6 +292,28 @@ function checkReleaseBehaviorGates(file, workflow) {
   );
 }
 
+function checkReleaseRefAndVersionPatch(file, workflow) {
+  const expectedConditions = new Map([
+    ["version-plan", mainRefCondition],
+    ["version-pr", `${mainRefCondition} && needs.version-plan.outputs.has_changes == 'true'`],
+    ["build-pack", `${mainRefCondition} && needs.version-plan.outputs.has_changes == 'false'`],
+    ["publish", `${mainRefCondition} && needs.build-pack.outputs.has_publishable_tarballs == 'true'`],
+  ]);
+  for (const [jobName, expected] of expectedConditions) {
+    if (workflow.jobs?.[jobName]?.if !== expected) {
+      fail(file, `${jobName} must be restricted to refs/heads/main`);
+    }
+  }
+
+  const versionPlan = workflow.jobs?.["version-plan"];
+  const decideStep = Array.isArray(versionPlan?.steps)
+    ? versionPlan.steps.find((step) => isMapping(step) && step.id === "decide")
+    : undefined;
+  if (!isMapping(decideStep) || typeof decideStep.run !== "string" || decideStep.run.trim() !== versionPatchCommand) {
+    fail(file, "version-plan must include new package changelogs in the version patch");
+  }
+}
+
 function checkOidcPublishJob(file, workflow) {
   const publishJob = workflow.jobs?.publish;
   if (!isMapping(publishJob)) {
@@ -302,7 +337,7 @@ function checkOidcPublishJob(file, workflow) {
   if (publishJob.needs !== "build-pack") {
     fail(file, "OIDC publish job must depend only on build-pack eligibility");
   }
-  if (publishJob.if !== "needs.build-pack.outputs.has_publishable_tarballs == 'true'") {
+  if (publishJob.if !== `${mainRefCondition} && needs.build-pack.outputs.has_publishable_tarballs == 'true'`) {
     fail(file, "OIDC publish job must run only when checksum-bound tarballs are eligible");
   }
 
@@ -494,6 +529,7 @@ function checkFile(file) {
     checkCiLaunchGates(file, workflow);
   } else if (fileName === "release.yml") {
     checkReleaseBehaviorGates(file, workflow);
+    checkReleaseRefAndVersionPatch(file, workflow);
     checkReleasePublishEligibility(file, workflow);
     checkOidcPublishJob(file, workflow);
   }
