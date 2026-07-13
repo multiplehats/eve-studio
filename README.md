@@ -1,5 +1,7 @@
 # eve-studio
 
+![Eve Studio showing a captured agent session](docs/assets/eve-studio.webp)
+
 eve-studio is a visual observability workspace for
 [eve](https://eve.dev) agents. Mount one extension, run the Studio collector,
 and inspect live sessions, messages, steps, tool calls, status, and usage from a
@@ -25,6 +27,14 @@ session events to the collector; the collector reduces them into a live session
 registry; the UI lets you move through each run without reading raw event files.
 
 Read the [eve documentation](https://eve.dev) for the agent project model.
+
+## Requirements
+
+- Node.js 24 or newer
+- An eve project using a stable version in `>=0.22.3 <0.23.0`
+
+This repository uses pnpm 10.33.4 for development. You do not need pnpm to run
+`npx eve-studio`.
 
 ## Quick start
 
@@ -82,6 +92,17 @@ the detail view.
 - Project, process, agent, channel, and eve version metadata
 - Historical sessions from `.workflow-data` when started with `--scan-disk`
 
+## Local by design
+
+The collector listens only on `127.0.0.1`. The extension posts compact event
+batches over loopback, and the collector keeps its registry in memory. Studio
+does not upload sessions or add remote access. Production capture is disabled
+unless you explicitly set `EVE_STUDIO_ENABLED=1`.
+
+Forwarding is best-effort and isolated from the agent turn: if Studio is not
+running, the extension drops old queued events under a fixed cap instead of
+blocking or failing the agent.
+
 ## Packages
 
 This repository is a pnpm workspace:
@@ -93,7 +114,8 @@ packages/
 └── ui/          # private browser UI bundled into the studio package
 
 apps/
-└── demo-agent/  # local eve agent fixture for smoke testing
+├── demo-agent/  # local eve agent fixture for smoke testing
+└── web/         # announcement and project landing page
 ```
 
 ## Local development
@@ -127,6 +149,12 @@ pnpm --filter @eve-studio/ui dev
 Open `http://127.0.0.1:43120`. The UI proxies API requests to the local
 collector on port `43110`.
 
+Build the project landing page:
+
+```sh
+pnpm --filter @eve-studio/web build
+```
+
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening
@@ -134,6 +162,8 @@ your first pull request. Keep changes focused, include tests for behavior that
 touches capture or reduction logic, and run the relevant package checks:
 
 ```sh
+pnpm lint
+pnpm format:check
 pnpm test
 pnpm typecheck
 pnpm smoke:studio
@@ -141,8 +171,8 @@ pnpm smoke:studio
 
 ## Security
 
-Please do not open public issues for security vulnerabilities. Report sensitive
-findings privately to [@itschrisjayden](https://x.com/itschrisjayden).
+Please do not open public issues for security vulnerabilities. See the
+[security policy](SECURITY.md) for private reporting options.
 
 ## Beta
 

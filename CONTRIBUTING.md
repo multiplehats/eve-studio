@@ -12,6 +12,7 @@ discuss a change before opening a pull request, reach out to
 
 This repository is a pnpm workspace.
 
+- Development requires Node.js 24 or newer and pnpm 10.33.4.
 - We use [pnpm](https://pnpm.io) and workspaces for package management.
 - The root package contains shared scripts for testing, typechecking, building,
   and smoke testing.
@@ -27,7 +28,8 @@ packages/
 `-- ui/          # private browser UI bundled into the studio package
 
 apps/
-`-- demo-agent/  # local eve agent fixture for smoke testing
+|-- demo-agent/  # local eve agent fixture for smoke testing
+`-- web/         # project landing page
 ```
 
 | Path | Description |
@@ -36,6 +38,7 @@ apps/
 | `packages/extension` | The `@eve-studio/extension` package mounted into eve projects. |
 | `packages/ui` | The private React/TanStack browser UI served by the collector. |
 | `apps/demo-agent` | A local eve project used for development and smoke testing. |
+| `apps/web` | The public project landing page. |
 
 ## Development
 
@@ -108,6 +111,8 @@ When opening a pull request:
 Useful root checks:
 
 ```sh
+pnpm lint
+pnpm format:check
 pnpm test
 pnpm typecheck
 pnpm smoke:studio
@@ -151,5 +156,5 @@ and `chore`.
 
 ## Security
 
-Please do not open public issues for security vulnerabilities. Report sensitive
-findings privately to [@itschrisjayden](https://x.com/itschrisjayden).
+Please do not open public issues for security vulnerabilities. Follow the
+[security policy](SECURITY.md) to report them privately.

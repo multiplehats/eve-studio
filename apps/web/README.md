@@ -3,6 +3,9 @@
 Marketing splash page for eve-studio: a single full-height hero with the
 install command, built with TanStack Start + Nitro.
 
+Run these commands from the repository root with Node.js 24 or newer and pnpm
+10.33.4.
+
 ## Develop
 
 ```sh
