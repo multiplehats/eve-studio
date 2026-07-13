@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 function usesPnp(projectRoot: string): boolean {
   let directory = projectRoot;
@@ -47,6 +47,7 @@ function isVisibleNodeModulesManifest(
 /** Reads the INSTALLED eve version, never the package.json range (pnpm catalog: ranges are unreadable). */
 export function installedEveVersion(projectRoot: string): string | undefined {
   try {
+    projectRoot = resolve(projectRoot);
     const projectRequire = createRequire(join(projectRoot, "package.json"));
     const manifestPath = projectRequire.resolve("eve/package.json");
     const searchPaths = projectRequire.resolve.paths("eve/package.json");

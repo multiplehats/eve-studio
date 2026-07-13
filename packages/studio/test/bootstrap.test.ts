@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findAgentProjects } from "../src/locate.js";
 import { installedEveVersion, SUPPORTED_EVE_RANGE, supportsEveVersion } from "../src/version-gate.js";
@@ -53,6 +53,16 @@ describe("version gate", () => {
     );
 
     expect(installedEveVersion(p)).toBe("0.22.4");
+  });
+  it("resolves Eve when the project path is relative to the current directory", () => {
+    const p = makeAgentProject(tmp());
+    mkdirSync(join(p, "node_modules", "eve"), { recursive: true });
+    writeFileSync(
+      join(p, "node_modules", "eve", "package.json"),
+      JSON.stringify({ name: "eve", version: "0.22.4" }),
+    );
+
+    expect(installedEveVersion(relative(process.cwd(), p))).toBe("0.22.4");
   });
   it("accepts only stable Eve releases in the supported compatibility window", () => {
     expect(SUPPORTED_EVE_RANGE).toBe(">=0.22.3 <0.23.0");
