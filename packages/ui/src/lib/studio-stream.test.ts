@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query"
 import type { SessionSummary } from "eve-studio"
 import {
   applyRegistryUpdate,
+  applySessionSnapshot,
   applySessionUpdate,
   createPerKeyThrottle,
 } from "./studio-stream"
@@ -117,5 +118,20 @@ describe("applyRegistryUpdate", () => {
     ).toEqual(["s2"])
     expect(client.getQueryState(["session", "s1"])).toBeUndefined()
     expect(refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe("applySessionSnapshot", () => {
+  it("replaces summaries and invalidates cached details after reconnect", () => {
+    const client = new QueryClient()
+    client.setQueryData(["sessions"], [summary("s1", 1)])
+    client.setQueryData(["session", "s1"], { summary: summary("s1", 1) })
+
+    applySessionSnapshot(client, [summary("s1", 99)])
+
+    expect(
+      client.getQueryData<SessionSummary[]>(["sessions"])?.[0].updatedAt
+    ).toBe(99)
+    expect(client.getQueryState(["session", "s1"])?.isInvalidated).toBe(true)
   })
 })

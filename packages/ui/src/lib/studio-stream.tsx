@@ -20,6 +20,14 @@ export function applySessionUpdate(
   return next
 }
 
+export function applySessionSnapshot(
+  client: QueryClient,
+  sessions: SessionSummary[]
+): void {
+  client.setQueryData(["sessions"], sessions)
+  void client.invalidateQueries({ queryKey: ["session"] })
+}
+
 /** At most one `fn(key)` per key per `ms` window; bursts within a window coalesce. */
 export function createPerKeyThrottle(
   ms: number,
@@ -92,7 +100,7 @@ function StreamBridge({ children }: { children: ReactNode }) {
       const { sessions } = JSON.parse(e.data) as {
         sessions: SessionSummary[]
       }
-      queryClient.setQueryData(["sessions"], sessions)
+      applySessionSnapshot(queryClient, sessions)
     })
     es.addEventListener("update", (e) => {
       const update = JSON.parse(e.data) as StreamUpdate
