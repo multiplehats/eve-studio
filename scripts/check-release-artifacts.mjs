@@ -26,10 +26,11 @@ const packages = [
       "dist/index.d.ts",
       "dist/tools/index.mjs",
       "dist/tools/index.d.ts",
-      "ext/extension.ts",
-      "ext/hooks/studio-forward.ts",
-      "ext/lib/envelope.ts",
-      "ext/lib/forwarder.ts"
+      "dist/ext/_manifest.json",
+      "dist/ext/extension.mjs",
+      "dist/ext/hooks/studio-forward.mjs",
+      "dist/ext/lib/envelope.mjs",
+      "dist/ext/lib/forwarder.mjs"
     ],
     executableFiles: [],
     shebangFiles: [],
