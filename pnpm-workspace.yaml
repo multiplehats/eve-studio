@@ -4,7 +4,9 @@ packages:
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-minimumReleaseAgeExclude: []
+# eve is excluded so Studio can track same-day eve releases (2026-07-29, user-approved).
+minimumReleaseAgeExclude:
+  - eve
 allowBuilds:
   sharp: false
 # Compatibility for eve releases with an incomplete runtime manifest.

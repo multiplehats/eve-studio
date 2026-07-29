@@ -1,8 +1,9 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-const PKG = "@eve-studio/extension";
-const GENERATED_MOUNT = `export { default } from "${PKG}";\n`;
+export const PKG = "@eve-studio/extension";
+export const GENERATED_MOUNT = `export { default } from "${PKG}";\n`;
+export const MOUNT_TARGET_RELATIVE_PATH = "agent/extensions/studio.ts";
 
 export type MountResult =
   | { kind: "ready"; command: string[]; mountFile: string; created: boolean }
@@ -29,7 +30,7 @@ export function isExtensionMounted(projectRoot: string): boolean {
     const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
     const hasDep = Boolean(pkg.dependencies?.[PKG] ?? pkg.devDependencies?.[PKG]);
     if (!hasDep) return false;
-    const extDir = join(projectRoot, "agent", "extensions");
+    const extDir = join(projectRoot, dirname(MOUNT_TARGET_RELATIVE_PATH));
     if (!existsSync(extDir)) return false;
     return readdirSync(extDir).some((f) => f.endsWith(".ts") && readFileSync(join(extDir, f), "utf8").includes(PKG));
   } catch {
@@ -54,7 +55,7 @@ export function detectPackageManager(projectRoot: string): "pnpm" | "yarn" | "bu
 export function scaffoldMount(projectRoot: string): MountResult {
   const pm = detectPackageManager(projectRoot);
   const command = pm === "npm" ? ["npm", "install", PKG] : [pm, "add", PKG];
-  const mountFile = join(projectRoot, "agent", "extensions", "studio.ts");
+  const mountFile = join(projectRoot, MOUNT_TARGET_RELATIVE_PATH);
   mkdirSync(dirname(mountFile), { recursive: true });
   try {
     writeFileSync(mountFile, GENERATED_MOUNT, { flag: "wx" });

@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
-    "eve": "0.22.4"
+    "eve": "0.27.12"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
