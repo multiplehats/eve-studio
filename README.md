@@ -65,13 +65,13 @@ you can install Studio straight from its registry manifest instead of running
 `npx eve-studio` and mounting manually:
 
 ```sh
-eve add https://eve-studio-tau.vercel.app/r/studio.json
+eve add https://eve-studio.chrisjayden.com/r/studio.json
 ```
 
 Or register a namespace once and resolve Studio by name:
 
 ```sh
-eve registry add @eve-studio=https://eve-studio-tau.vercel.app/r/{name}.json
+eve registry add @eve-studio=https://eve-studio.chrisjayden.com/r/{name}.json
 eve add @eve-studio/studio
 ```
 

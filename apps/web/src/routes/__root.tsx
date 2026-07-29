@@ -11,7 +11,7 @@ import appCss from "../styles.css?url"
 const TITLE = "eve-studio: Watch your agent work"
 const DESCRIPTION =
   "One command mounts a live observability workspace beside your eve agent, showing sessions, messages, tool calls, and usage, streamed to your browser."
-const SITE_URL = "https://eve-studio-tau.vercel.app"
+const SITE_URL = "https://eve-studio.chrisjayden.com"
 const SOCIAL_IMAGE = `${SITE_URL}/og-image.webp`
 
 export const Route = createRootRoute({
