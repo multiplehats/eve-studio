@@ -59,7 +59,7 @@ export function installedEveVersion(projectRoot: string): string | undefined {
   }
 }
 
-export const SUPPORTED_EVE_RANGE = ">=0.22.3 <0.23.0";
+export const SUPPORTED_EVE_RANGE = ">=0.25.0 <0.28.0";
 
 function parseStableVersion(version: string): [number, number, number] | undefined {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
@@ -68,9 +68,10 @@ function parseStableVersion(version: string): [number, number, number] | undefin
   return parsed.every(Number.isSafeInteger) ? parsed : undefined;
 }
 
+/** Implements the `>=0.25.0 <0.28.0` window: stable 0.x releases with minor in [25, 28). */
 export function supportsEveVersion(version: string): boolean {
   const parsed = parseStableVersion(version);
   if (!parsed) return false;
-  const [major, minor, patch] = parsed;
-  return major === 0 && minor === 22 && patch >= 3;
+  const [major, minor] = parsed;
+  return major === 0 && minor >= 25 && minor < 28;
 }

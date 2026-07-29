@@ -46,7 +46,7 @@ Only decimal ports from `1` to `65535` are accepted.
 - `EVE_STUDIO_GROUP` can group related runs, and `EVE_STUDIO_KIND` can label a
   launcher-defined process kind.
 
-The current release supports stable eve versions `>=0.22.3 <0.23.0`.
+The current release supports stable eve versions `>=0.25.0 <0.28.0`.
 
 ## Support
 

@@ -31,7 +31,7 @@ Read the [eve documentation](https://eve.dev) for the agent project model.
 ## Requirements
 
 - Node.js 24 or newer
-- An eve project using a stable version in `>=0.22.3 <0.23.0`
+- An eve project using a stable version in `>=0.25.0 <0.28.0`
 
 This repository uses pnpm 10.33.4 for development. You do not need pnpm to run
 `npx eve-studio`.
@@ -57,6 +57,28 @@ To include sessions already written to `.workflow-data`:
 ```sh
 npx eve-studio --scan-disk
 ```
+
+## Install with `eve add`
+
+If your `eve` CLI includes the `eve add` command (introduced in eve 0.27),
+you can install Studio straight from its registry manifest instead of running
+`npx eve-studio` and mounting manually:
+
+```sh
+eve add https://eve-studio.chrisjayden.com/r/studio.json
+```
+
+Or register a namespace once and resolve Studio by name:
+
+```sh
+eve registry add @eve-studio=https://eve-studio.chrisjayden.com/r/{name}.json
+eve add @eve-studio/studio
+```
+
+Both forms write `agent/extensions/studio.ts` and add
+`@eve-studio/extension` as a dependency, the same result the CLI's mount
+flow produces. This requires an `eve` version that ships the `eve add`
+command; if it's unavailable, use the quick start above.
 
 ## A minimal setup
 

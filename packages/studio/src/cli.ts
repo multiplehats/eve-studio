@@ -57,7 +57,7 @@ const project = await resolveProject();
 const eveVersion = installedEveVersion(project);
 if (eveVersion === undefined) die(`eve is not installed in ${project}. Run your package manager's install first.`);
 if (!supportsEveVersion(eveVersion)) {
-  die(`eve-studio supports eve ${SUPPORTED_EVE_RANGE} (found ${eveVersion}). Install a compatible version: ${detectPackageManager(project)} add eve@^0.22.3`);
+  die(`eve-studio supports eve ${SUPPORTED_EVE_RANGE} (found ${eveVersion}). Install a compatible version: ${detectPackageManager(project)} add eve@^0.27.8`);
 }
 
 if (!isExtensionMounted(project)) {

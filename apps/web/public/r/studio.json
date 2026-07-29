@@ -1,0 +1,16 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "studio",
+  "title": "eve-studio",
+  "description": "Local observability for eve agents: streams session events to the eve-studio collector for live inspection in a browser UI.",
+  "type": "registry:item",
+  "dependencies": ["@eve-studio/extension"],
+  "files": [
+    {
+      "path": "registry/extensions/studio.ts",
+      "content": "export { default } from \"@eve-studio/extension\";\n",
+      "type": "registry:file",
+      "target": "agent/extensions/studio.ts"
+    }
+  ]
+}

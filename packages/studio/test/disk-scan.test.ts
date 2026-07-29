@@ -10,7 +10,7 @@ const FIXTURE_ROOT = fileURLToPath(new URL("./fixtures/workflow-data/", import.m
 
 function projectWithFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "eve-studio-scan-"));
-  cpSync(FIXTURE_ROOT, join(root, ".workflow-data"), { recursive: true });
+  cpSync(FIXTURE_ROOT, join(root, ".eve", ".workflow-data"), { recursive: true });
   return root;
 }
 
@@ -52,7 +52,7 @@ describe("scanWorkflowData", () => {
   it("corrupted chunk (bad base64) -> stream skipped, scan survives", () => {
     const root = projectWithFixture();
     // Overwrite the first chunk file of the only stream with garbage.
-    const chunksDir = join(root, ".workflow-data", "streams", "chunks");
+    const chunksDir = join(root, ".eve", ".workflow-data", "streams", "chunks");
     const streamDir = join(chunksDir, readdirSync(chunksDir)[0]);
     const firstChunk = join(streamDir, readdirSync(streamDir).sort()[0]);
     writeFileSync(firstChunk, "%%%not-base64%%%");
@@ -66,7 +66,7 @@ describe("scanWorkflowData", () => {
     // excluded. Encoding matches the REAL observed framing (devl-wrapped
     // base64, see encodeChunk above) so this exercises the real parse path.
     const root = mkdtempSync(join(tmpdir(), "eve-studio-noise-"));
-    const streamDir = join(root, ".workflow-data", "streams", "chunks", "strm_00000000000000000000000000_user");
+    const streamDir = join(root, ".eve", ".workflow-data", "streams", "chunks", "strm_00000000000000000000000000_user");
     mkdirSync(streamDir, { recursive: true });
     const noiseEvents = [
       { type: "session.started", data: { runtime: { agentId: "noise-agent" } } },

@@ -6,7 +6,7 @@ sessions, messages, tool calls, steps, and usage in your browser.
 ## Requirements
 
 - Node.js 24 or newer
-- A stable eve release in `>=0.22.3 <0.23.0`
+- A stable eve release in `>=0.25.0 <0.28.0`
 
 ## Usage
 
