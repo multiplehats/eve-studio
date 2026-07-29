@@ -40,7 +40,8 @@ async function stop(child) {
 }
 
 // Fresh disk state so phase 2 provably rediscovers THIS run's session.
-rmSync(`${DEMO}/.workflow-data`, { recursive: true, force: true });
+// eve 0.27 moved the Workflow World data dir under .eve/ (see disk-scan.ts).
+rmSync(`${DEMO}/.eve/.workflow-data`, { recursive: true, force: true });
 
 // --- Phase 1: live capture into a running Studio ---
 const studio = startStudio();
@@ -88,9 +89,14 @@ await stop(studio);
 const studio2 = startStudio(["--scan-disk"]);
 await waitHealthy();
 const snap2 = await (await fetch(`${BASE}/api/sessions`)).json();
-check("diskRediscovery", snap2.sessions.some((x) => x.sessionId === liveSessionId));
-const detail2 = await (await fetch(`${BASE}/api/sessions/${encodeURIComponent(liveSessionId)}`)).json();
-check("noDiskMessageSoFarLeak", !detail2.events.some((e) => e.event?.data?.messageSoFar !== undefined));  // disk path strips too
+const diskRediscovered = snap2.sessions.some((x) => x.sessionId === liveSessionId);
+check("diskRediscovery", diskRediscovered);
+if (diskRediscovered) {
+  const detail2 = await (await fetch(`${BASE}/api/sessions/${encodeURIComponent(liveSessionId)}`)).json();
+  check("noDiskMessageSoFarLeak", detail2.events !== undefined && !detail2.events.some((e) => e.event?.data?.messageSoFar !== undefined));  // disk path strips too
+} else {
+  check("noDiskMessageSoFarLeak", false); // expected session never showed up on disk; nothing to check
+}
 await stop(studio2);
 
 console.log(JSON.stringify(results, null, 2));

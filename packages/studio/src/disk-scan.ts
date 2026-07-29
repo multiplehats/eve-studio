@@ -85,10 +85,21 @@ function decodeChunk(buf: Buffer): { type: string; data?: unknown } {
   return event;
 }
 
+/**
+ * eve 0.27 moved the local Workflow World's data directory from
+ * `<projectRoot>/.workflow-data` to `<projectRoot>/.eve/.workflow-data`
+ * (see the compiled `@workflow/world-local` package's
+ * `LOCAL_WORKFLOW_WORLD_DATA_DIRECTORY_RELATIVE_PATH` constant, sourced from
+ * `resolveLocalWorkflowWorldDataDirectory`). The chunk framing itself
+ * (devl-marker binary header wrapping a base64 JSON payload) and the
+ * `strm_<ULID>_user` stream-directory naming are unchanged from 0.22.
+ */
+const WORKFLOW_DATA_RELATIVE_PATH = join(".eve", ".workflow-data");
+
 export function scanWorkflowData(projectRoot: string): ScanResult {
   const result: ScanResult = { sessions: [], skipped: 0 };
   try {
-    const chunksRoot = join(projectRoot, ".workflow-data", "streams", "chunks");
+    const chunksRoot = join(projectRoot, WORKFLOW_DATA_RELATIVE_PATH, "streams", "chunks");
     if (!existsSync(chunksRoot)) return result;
     for (const streamDir of readdirSync(chunksRoot)) {
       try {
